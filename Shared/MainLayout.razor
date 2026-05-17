@@ -1,0 +1,61 @@
+﻿@namespace HairSalon.Shared
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-bar px-4">
+            <div class="d-flex justify-content-between align-items-center py-2">
+                <h4 class="mb-0"> Панель управления</h4>
+                <button class="btn btn-outline-secondary" @onclick="GoHome">
+                    <i class="fas fa-home"></i> На сайт
+                </button>
+            </div>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<style>
+    .page {
+        display: flex;
+        height: 100vh;
+    }
+
+    .sidebar {
+        width: 260px;
+        background: #35495f;
+        color: white;
+    }
+
+    main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+    }
+
+    .top-bar {
+        background: #2c3e50;
+        border-bottom: 1px solid #2c3e50;
+    }
+
+    .content {
+        flex: 1;
+        padding: 20px;
+    }
+</style>
+
+@code {
+    private void GoHome()
+    {
+        Navigation.NavigateTo("/");
+    }
+}

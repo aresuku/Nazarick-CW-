@@ -1,0 +1,474 @@
+﻿@page "/"
+@using HairSalon.DTOs
+@using Microsoft.EntityFrameworkCore
+@inject HairSalon.Data.HairSalonContext Context
+@inject IMasterService MasterService
+@inject IServiceService ServiceService
+@inject IReceptionService ReceptionService
+@inject IJSRuntime JS
+
+<div class="container mt-4">
+    <!-- Hero секция -->
+    <div class="hero-section text-center py-5 mb-5 rounded-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <div class="container">
+            <h1 class="display-3 fw-bold text-white mb-3">
+                <i class="fas fa-cut me-3"></i>Добро пожаловать в HairSalon
+            </h1>
+            <p class="lead text-white-50 mb-4">Ваш идеальный образ начинается здесь</p>
+            <div class="d-flex justify-content-center gap-3">
+                <a href="/services" class="btn btn-light btn-lg px-4">
+                    <i class="fas fa-scissors me-2"></i>Наши услуги
+                </a>
+                <a href="/receptions" class="btn btn-outline-light btn-lg px-4">
+                    <i class="fas fa-calendar-alt me-2"></i>Записаться
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Статистика -->
+    <div class="row text-center mb-5 g-4">
+        <div class="col-md-3">
+            <div class="stats-card p-4 rounded-3 shadow-sm" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <i class="fas fa-users fa-3x text-white mb-3"></i>
+                <h3 class="text-white mb-0">@_mastersCount</h3>
+                <p class="text-white-50 mb-0">Мастеров</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card p-4 rounded-3 shadow-sm" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <i class="fas fa-cut fa-3x text-white mb-3"></i>
+                <h3 class="text-white mb-0">@_servicesCount</h3>
+                <p class="text-white-50 mb-0">Видов услуг</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card p-4 rounded-3 shadow-sm" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <i class="fas fa-calendar-check fa-3x text-white mb-3"></i>
+                <h3 class="text-white mb-0">@_receptionsCount</h3>
+                <p class="text-white-50 mb-0">Выполненных записей</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card p-4 rounded-3 shadow-sm" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                <i class="fas fa-star fa-3x text-white mb-3"></i>
+                <h3 class="text-white mb-0">5.0</h3>
+                <p class="text-white-50 mb-0">Рейтинг клиентов</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Популярные услуги -->
+    <div class="services-section mb-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">
+                <i class="fas fa-star text-warning me-2"></i>Популярные услуги
+            </h2>
+            <a href="/services" class="btn btn-outline-primary">Все услуги →</a>
+        </div>
+        <div class="row g-4">
+            @foreach (var service in _popularServices)
+            {
+                <div class="col-md-4">
+                    <div class="service-card card h-100 shadow-sm border-0 rounded-4 overflow-hidden">
+                        <div class="card-body p-4">
+                            <div class="service-icon mb-3">
+                                @if (service.Name.Contains("Стрижка"))
+                                {
+                                    <i class="fas fa-cut fa-2x text-primary"></i>
+                                }
+                                else if (service.Name.Contains("Окрашивание"))
+                                {
+                                    <i class="fas fa-palette fa-2x text-primary"></i>
+                                }
+                                else
+                                {
+                                    <i class="fas fa-spa fa-2x text-primary"></i>
+                                }
+                            </div>
+                            <h5 class="card-title text-white">@service.Name</h5>
+                            <p class="card-text text-white-50 small">@(service.Description?.Length > 80 ? service.Description.Substring(0, 80) + "..." : service.Description)</p>
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <span class="price-tag h4 mb-0 text-primary">@service.Price.ToString("N0") ₽</span>
+                                <a href="/receptions" class="btn btn-sm btn-outline-primary">Записаться</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Наши мастера -->
+    <div class="masters-section mb-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">
+                <i class="fas fa-users text-primary me-2"></i>Наши мастера
+            </h2>
+            <button class="btn btn-outline-primary" @onclick="LoadMasters">
+                <i class="fas fa-sync-alt me-2"></i>Обновить
+            </button>
+        </div>
+
+        @if (_isLoadingMasters)
+        {
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="row g-4">
+                @foreach (var master in _masters)
+                {
+                    <div class="col-md-4 col-lg-3">
+                        <div class="master-card card shadow-sm border-0 rounded-4 text-center p-4 h-100">
+                            <div class="master-avatar mx-auto mb-3">
+                                <div class="avatar-circle bg-primary d-flex align-items-center justify-content-center rounded-circle mx-auto" style="width: 100px; height: 100px;">
+                                    <span class="display-4 fw-bold text-white">@(master.FirstName[0])@(master.LastName[0])</span>
+                                </div>
+                            </div>
+                            <h5 class="mb-1 text-white">@master.FirstName @master.LastName</h5>
+                            <p class="text-white-50 small mb-2">
+                                <i class="fas fa-gender-@(master.Gender == "М" ? "mars" : "venus") me-1"></i>
+                                @(master.Gender == "М" ? "Мужской" : "Женский")
+                            </p>
+                            <p class="text-warning small mb-2">
+                                <i class="fas fa-star me-1"></i>
+                                <i class="fas fa-star me-1"></i>
+                                <i class="fas fa-star me-1"></i>
+                                <i class="fas fa-star me-1"></i>
+                                <i class="fas fa-star-half-alt me-1"></i>
+                            </p>
+                            <p class="experience-text small text-white-50">
+                                <i class="fas fa-briefcase me-1"></i>Опыт: @master.Experience
+                            </p>
+                            <a href="/receptions" class="btn btn-sm btn-outline-light mt-2 w-100">
+                                <i class="fas fa-calendar-alt me-2"></i>Записаться
+                            </a>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Преимущества -->
+    <div class="features-section mb-5">
+        <h2 class="text-center mb-5">
+            <i class="fas fa-gem text-primary me-2"></i>Почему выбирают нас
+        </h2>
+        <div class="row g-4">
+            <div class="col-md-3">
+                <div class="feature-card text-center p-4 rounded-4 shadow-sm h-100">
+                    <div class="feature-icon mb-3">
+                        <i class="fas fa-medal fa-3x text-primary"></i>
+                    </div>
+                    <h5>Профессионализм</h5>
+                    <p class="text-white-50 text-muted small">Опытные мастера с многолетним стажем</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="feature-card text-center p-4 rounded-4 shadow-sm h-100">
+                    <div class="feature-icon mb-3">
+                        <i class="fas fa-clock fa-3x text-primary"></i>
+                    </div>
+                    <h5>Удобное время</h5>
+                    <p class="text-white-50 text-muted small">Работаем с 10:00 до 20:00 ежедневно</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="feature-card text-center p-4 rounded-4 shadow-sm h-100">
+                    <div class="feature-icon mb-3">
+                        <i class="fas fa-leaf fa-3x text-primary"></i>
+                    </div>
+                    <h5>Качественные материалы</h5>
+                    <p class="text-white-50 text-muted small">Используем только премиум продукцию</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="feature-card text-center p-4 rounded-4 shadow-sm h-100">
+                    <div class="feature-icon mb-3">
+                        <i class="fas fa-hand-sparkles fa-3x text-primary"></i>
+                    </div>
+                    <h5>Индивидуальный подход</h5>
+                    <p class="text-white-50 text-muted small">Учитываем все пожелания клиентов</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Отзывы -->
+    <div class="reviews-section mb-5">
+        <h2 class="text-center mb-5">
+            <i class="fas fa-comments text-primary me-2"></i>Что говорят клиенты
+        </h2>
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="review-card p-4 rounded-4 shadow-sm h-100">
+                    <div class="mb-3">
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                    </div>
+                    <p class="review-text">"Отличный салон! Делала стрижку у мастера, результат превзошёл ожидания. Обязательно приду ещё!"</p>
+                    <div class="review-author mt-3">
+                        <strong>Анна Иванова</strong>
+                        <div class="text-white-50 text-muted small">Стрижка и окрашивание</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="review-card p-4 rounded-4 shadow-sm h-100">
+                    <div class="mb-3">
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                    </div>
+                    <p class="review-text">"Очень понравилась атмосфера в салоне. Мастера вежливые и профессиональные. Рекомендую!"</p>
+                    <div class="review-author mt-3">
+                        <strong>Мария Петрова</strong>
+                        <div class="text-white-50 text-muted small">Маникюр и педикюр</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="review-card p-4 rounded-4 shadow-sm h-100">
+                    <div class="mb-3">
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                        <i class="fas fa-star text-warning"></i>
+                    </div>
+                    <p class="review-text">"Лучший салон в городе! Всегда записываюсь только сюда. Цены приемлемые, качество отличное."</p>
+                    <div class="review-author mt-3">
+                        <strong>Екатерина Смирнова</strong>
+                        <div class="text-white-50 text-muted small">Комплексный уход</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Контакты и карта -->
+    <div class="contacts-section">
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="contact-card p-4 rounded-4 shadow-sm h-100">
+                    <h4 class="mb-4">
+                        <i class="fas fa-map-marker-alt text-primary me-2"></i>Наш адрес
+                    </h4>
+                    <p><i class="fas fa-location-dot me-2 text-primary"></i> г. Москва, ул. Примерная, д. 123</p>
+                    <p><i class="fas fa-phone me-2 text-primary"></i> +7 (999) 123-45-67</p>
+                    <p><i class="fas fa-envelope me-2 text-primary"></i> info@hairsalon.ru</p>
+                    <p><i class="fas fa-clock me-2 text-primary"></i> Пн-Вс: 10:00 - 20:00</p>
+                    <div class="social-links mt-3">
+                        <a href="#" class="btn btn-outline-primary btn-sm rounded-circle me-2">
+                            <i class="fab fa-telegram"></i>
+                        </a>
+                        <a href="#" class="btn btn-outline-primary btn-sm rounded-circle me-2">
+                            <i class="fab fa-instagram"></i>
+                        </a>
+                        <a href="#" class="btn btn-outline-primary btn-sm rounded-circle me-2">
+                            <i class="fab fa-vk"></i>
+                        </a>
+                        <a href="#" class="btn btn-outline-primary btn-sm rounded-circle">
+                            <i class="fab fa-whatsapp"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="map-card p-4 rounded-4 shadow-sm h-100">
+                    <h4 class="mb-4">
+                        <i class="fas fa-map text-primary me-2"></i>Как нас найти
+                    </h4>
+                    <div class="map-placeholder bg-light rounded-3 d-flex align-items-center justify-content-center" style="height: 250px;">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-map-marked-alt fa-4x mb-3 opacity-50"></i>
+                            <p>Интерактивная карта</p>
+                            <small>г. Москва, ул. Примерная, д. 123</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>    
+</div>
+
+<!-- Footer -->
+<footer class="footer mt-5 pt-4 pb-3 border-top">
+    <div class="row">
+        <div class="col-md-4">
+            <h5><i class="fas fa-cut me-2"></i>HairSalon</h5>
+            <p class="text-white-75 small">Салон красоты премиум класса. Забота о вашей красоте - наша главная задача.</p>
+        </div>
+        <div class="col-md-4">
+            <h6>Быстрые ссылки</h6>
+            <ul class="list-unstyled">
+                <li><a href="/services" class="text-white-75 text-decoration-none small">Услуги</a></li>
+                <li><a href="/receptions" class="text-white-75 text-decoration-none small">Запись онлайн</a></li>
+                <li><a href="/masters" class="text-white-75 text-decoration-none small">Наши мастера</a></li>
+            </ul>
+        </div>
+        <div class="col-md-4">
+            <h6>Рабочее время</h6>
+            <p class="text-white-75 small mb-0">Понедельник - Воскресенье</p>
+            <p class="text-white-75 small">10:00 - 20:00</p>
+        </div>
+    </div>
+    <div class="text-white-75 text-center small mt-3 pt-3 border-top">
+        &copy; @DateTime.Now.Year HairSalon. Все права защищены.
+    </div>
+</footer>
+
+<style>
+    .hero-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .stats-card, .service-card, .master-card, .feature-card, .review-card, .contact-card, .map-card {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+        .stats-card:hover, .service-card:hover, .master-card:hover, .feature-card:hover, .review-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important;
+        }
+
+    .avatar-circle {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+    }
+
+    .price-tag {
+        font-weight: bold;
+        color: #667eea;
+    }
+
+    .service-icon {
+        width: 60px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(102, 126, 234, 0.1);
+        border-radius: 12px;
+    }
+
+    .feature-icon {
+        color: #667eea;
+    }
+
+    .social-links .btn {
+        width: 35px;
+        height: 35px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .map-placeholder {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    }
+
+    .footer a:hover {
+        color: #667eea !important;
+    }
+
+    .btn-outline-primary:hover {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        color: white;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+    }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a67d8 0%, #6b46a0 100%);
+        }
+
+    .badge-custom {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+</style>
+
+@code {
+    private List<AdminMasterDto> _masters = new();
+    private List<ServiceDto> _popularServices = new();
+    private int _mastersCount = 0;
+    private int _servicesCount = 0;
+    private int _receptionsCount = 0;
+    private bool _isLoadingMasters = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMasters();
+        await LoadServices();
+        await LoadReceptionsCount();
+    }
+
+    private async Task LoadMasters()
+    {
+        try
+        {
+            _isLoadingMasters = true;
+            var mastersFromDb = await Context.Masters
+                .Include(m => m.User)
+                .ToListAsync();
+            _masters = (await MasterService.GetFormattedMastersForAdminAsync(mastersFromDb)).ToList();
+            _mastersCount = _masters.Count;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки мастеров: {ex.Message}");
+        }
+        finally
+        {
+            _isLoadingMasters = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadServices()
+    {
+        try
+        {
+            var services = await Context.Services.ToListAsync();
+            var allServices = (await ServiceService.GetFormattedServicesForAdminAsync(services)).ToList();
+            _servicesCount = allServices.Count;
+            _popularServices = allServices.Take(3).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки услуг: {ex.Message}");
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadReceptionsCount()
+    {
+        try
+        {
+            var receptions = await Context.Receptions.ToListAsync();
+            _receptionsCount = receptions.Count;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки записей: {ex.Message}");
+        }
+        StateHasChanged();
+    }
+}

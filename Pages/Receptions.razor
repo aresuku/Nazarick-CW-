@@ -1,0 +1,622 @@
+﻿@page "/receptions"
+@using HairSalon.Models
+@using HairSalon.DTOs
+@using Microsoft.EntityFrameworkCore
+@inject HairSalon.Data.HairSalonContext Context
+@inject IReceptionService ReceptionService
+@inject IMasterService MasterService
+@inject IServiceService ServiceService
+@inject IUserService UserService
+@inject IJSRuntime JS
+
+<h1 class="mb-4">Управление записями</h1>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <button class="btn btn-primary me-2" @onclick="ShowCreateModal">
+                <i class="fas fa-plus"></i> Новая запись
+            </button>
+            <button class="btn btn-secondary" @onclick="LoadReceptions">
+                <i class="fas fa-sync-alt"></i> Обновить
+            </button>
+        </div>
+        <div class="d-flex gap-2">
+            <select class="form-select" style="width: 200px;" @bind="filterMasterId" @bind:event="onchange">
+                <option value="0">Все мастера</option>
+                @foreach (var master in _masters)
+                {
+                    <option value="@master.Id">@master.FirstName @master.LastName</option>
+                }
+            </select>
+            <input type="date" class="form-control" style="width: 200px;" @bind="filterDate" @bind:event="onchange" />
+            <input type="text" class="form-control" placeholder="Поиск..." style="width: 200px;" @bind="searchText" @bind:event="oninput" />
+        </div>
+    </div>
+    <div class="card-body">
+        @if (_receptions == null)
+        {
+            <div class="text-center p-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+        }
+        else if (!_displayReceptions.Any())
+        {
+            <div class="alert alert-info text-center">
+                <i class="fas fa-info-circle"></i> Нет записей для отображения
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Дата и время</th>
+                            <th>Мастер</th>
+                            <th>Услуга</th>
+                            <th>Клиент</th>
+                            <th>Статус</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var reception in _displayReceptions)
+                        {
+                            <tr>
+                                <td>@reception.Id</td>
+                                <td>@reception.Time.ToString("dd.MM.yyyy HH:mm")</td>
+                                <td>
+                                    <strong>@reception.Master?.FirstName @reception.Master?.LastName</strong><br />
+                                    <small class="text-muted">@reception.Master?.Experience</small>
+                                </td>
+                                <td>
+                                    <strong>@reception.Service?.Name</strong><br />
+                                    <small class="text-muted">@reception.Service?.Price.ToString("N0") ₽</small>
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(reception.ClientDisplayInfo))
+                                    {
+                                        <span>@reception.ClientDisplayInfo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">Не указан</span>
+                                    }
+                                </td>
+                                <td>
+                                    @{
+                                        var isPast = reception.Time < DateTime.Now;
+                                        var isToday = reception.Time.Date == DateTime.Now.Date;
+                                        var hoursUntil = (reception.Time - DateTime.Now).TotalHours;
+                                    }
+                                    @if (isPast)
+                                    {
+                                        <span class="badge bg-secondary">Прошла</span>
+                                    }
+                                    else if (isToday)
+                                    {
+                                        <span class="badge bg-warning text-dark">Сегодня</span>
+                                    }
+                                    else if (hoursUntil < 24)
+                                    {
+                                        <span class="badge bg-info text-dark">Скоро</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success">Активна</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-primary" @onclick="() => ShowEditModal(reception)">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-outline-danger" @onclick="() => DeleteReception(reception.Id)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Модальное окно создания/редактирования записи -->
+<div class="modal fade @(showModal ? "show d-block" : "")" id="receptionModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h5 class="modal-title">@(isEditMode ? "Редактирование записи" : "Новая запись")</h5>
+                <button type="button" class="btn-close" @onclick="CloseModal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="fas fa-exclamation-circle me-2"></i> @errorMessage
+                        <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Мастер <span class="text-danger">*</span></label>
+                    <select class="form-select @(masterError ? "is-invalid" : "")" @bind="_selectedMasterId" @bind:event="onchange">
+                        <option value="0">-- Выберите мастера --</option>
+                        @foreach (var master in _masters)
+                        {
+                            <option value="@master.Id">@master.FirstName @master.LastName - @master.Experience</option>
+                        }
+                    </select>
+                    @if (masterError)
+                    {
+                        <div class="invalid-feedback">Выберите мастера</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Услуга <span class="text-danger">*</span></label>
+                    <select class="form-select @(serviceError ? "is-invalid" : "")" @bind="_selectedServiceId" @bind:event="onchange">
+                        <option value="0">-- Выберите услугу --</option>
+                        @foreach (var service in _services)
+                        {
+                            <option value="@service.Id">@service.Name - @service.Price.ToString("N0") ₽</option>
+                        }
+                    </select>
+                    @if (serviceError)
+                    {
+                        <div class="invalid-feedback">Выберите услугу</div>
+                    }
+                </div>
+
+                @if (!isEditMode || (isEditMode && _selectedClientId != null))
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Клиент @(isEditMode ? "" : "(необязательно)")</label>
+                        <select class="form-select" @bind="_selectedClientId" @bind:event="onchange">
+                            <option value="0">@(isEditMode ? "-- Без клиента --" : "-- Запись от мастера --")</option>
+                            @foreach (var user in _users)
+                            {
+                                <option value="@user.Id">@user.Username (@user.Login)</option>
+                            }
+                        </select>
+                        @if (!isEditMode)
+                        {
+                            <small style="color: #ced4da;">Если клиент не выбран, запись будет создана от имени мастера</small>
+                        }
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Дата и время <span class="text-danger">*</span></label>
+                    <input type="datetime-local" class="form-control @(timeError ? "is-invalid" : "")"
+                           @bind="_selectedTime" @bind:event="oninput" />
+                    @if (timeError)
+                    {
+                        <div class="invalid-feedback">Выберите дату и время</div>
+                    }
+                </div>
+
+                <div class="alert alert-info small">
+                    <i class="fas fa-clock"></i>
+                    <strong>Доступное время:</strong> 10:00 - 20:00<br />
+                    <strong>Интервал:</strong> 30 минут<br />
+                    <strong>Внимание:</strong> Нельзя записаться на прошедшее время
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseModal">Отмена</button>
+                <button type="button" class="btn btn-primary" @onclick="SaveReception" @disabled="isLoading">
+                    @if (isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<AdminReceptionDto> _receptions = new();
+    private List<AdminReceptionDto> _displayReceptions = new();
+    private List<AdminMasterDto> _masters = new();
+    private List<ServiceDto> _services = new();
+    private List<AdminUserDto> _users = new();
+
+    private int filterMasterId = 0;
+    private DateTime? filterDate = null;
+    private string searchText = string.Empty;
+
+    private bool showModal = false;
+    private bool isEditMode = false;
+    private int _editingId = 0;
+    private int _selectedMasterId = 0;
+    private int _selectedServiceId = 0;
+    private int? _selectedClientId = 0;
+    private DateTime _selectedTime = DateTime.Now.AddHours(1).AddMinutes(-DateTime.Now.Minute % 30);
+
+    private bool isLoading = false;
+    private string errorMessage = string.Empty;
+
+    // Валидация
+    private bool masterError = false;
+    private bool serviceError = false;
+    private bool timeError = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAllData();
+    }
+
+    private async Task LoadAllData()
+    {
+        await LoadMasters();
+        await LoadServices();
+        await LoadUsers();
+        await LoadReceptions();
+    }
+
+    private async Task LoadMasters()
+    {
+        try
+        {
+            var mastersFromDb = await Context.Masters
+                .Include(m => m.User)
+                .ToListAsync();
+            _masters = (await MasterService.GetFormattedMastersForAdminAsync(mastersFromDb)).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ошибка загрузки мастеров: {ex.Message}";
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadServices()
+    {
+        try
+        {
+            var services = await Context.Services.ToListAsync();
+            _services = (await ServiceService.GetFormattedServicesForAdminAsync(services)).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ошибка загрузки услуг: {ex.Message}";
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadUsers()
+    {
+        try
+        {
+            var users = await Context.Users.ToListAsync();
+            _users = (await UserService.GetFormattedUsersForAdminAsync(users)).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ошибка загрузки пользователей: {ex.Message}";
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadReceptions()
+    {
+        try
+        {
+            var receptionsFromDb = await Context.Receptions
+                .Include(r => r.Master)
+                    .ThenInclude(m => m.User)
+                .Include(r => r.Service)
+                .Include(r => r.Client)
+                .ToListAsync();
+
+            var filtered = receptionsFromDb.AsEnumerable();
+
+            if (filterMasterId > 0)
+            {
+                filtered = filtered.Where(r => r.MasterId == filterMasterId);
+            }
+
+            if (filterDate.HasValue)
+            {
+                filtered = filtered.Where(r => r.Time.Date == filterDate.Value.Date);
+            }
+
+            _receptions = (await ReceptionService.GetFormattedReceptionsForAdminAsync(filtered)).ToList();
+            FilterReceptions();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ошибка загрузки записей: {ex.Message}";
+        }
+        StateHasChanged();
+    }
+
+    private void FilterReceptions()
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            _displayReceptions = _receptions.ToList();
+        }
+        else
+        {
+            _displayReceptions = _receptions
+                .Where(r => (r.Master?.FirstName?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                           (r.Master?.LastName?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                           (r.Service?.Name?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                           (r.ClientDisplayInfo?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    private bool IsMasterBusy(int masterId, DateTime time)
+    {
+        return _receptions.Any(r => r.Master != null && r.Master.Id == masterId && r.Time == time && (!isEditMode || r.Id != _editingId));
+    }
+
+    private void ShowCreateModal()
+    {
+        ResetForm();
+        isEditMode = false;
+        _editingId = 0;
+        showModal = true;
+        StateHasChanged();
+    }
+
+    private void ShowEditModal(AdminReceptionDto reception)
+    {
+        ResetForm();
+        isEditMode = true;
+        _editingId = reception.Id;
+        _selectedMasterId = reception.Master?.Id ?? 0;
+        _selectedServiceId = reception.Service?.Id ?? 0;
+        _selectedClientId = reception.Client?.Id;
+        _selectedTime = reception.Time;
+        showModal = true;
+        StateHasChanged();
+    }
+
+    private void ResetForm()
+    {
+        _selectedMasterId = 0;
+        _selectedServiceId = 0;
+        _selectedClientId = 0;
+        _selectedTime = DateTime.Now.AddHours(1).AddMinutes(-DateTime.Now.Minute % 30);
+        errorMessage = string.Empty;
+        masterError = false;
+        serviceError = false;
+        timeError = false;
+    }
+
+    private bool ValidateForm()
+    {
+        bool isValid = true;
+
+        if (_selectedMasterId == 0)
+        {
+            masterError = true;
+            isValid = false;
+        }
+        else
+        {
+            masterError = false;
+        }
+
+        if (_selectedServiceId == 0)
+        {
+            serviceError = true;
+            isValid = false;
+        }
+        else
+        {
+            serviceError = false;
+        }
+
+        if (_selectedTime == default)
+        {
+            timeError = true;
+            isValid = false;
+        }
+        else
+        {
+            timeError = false;
+        }
+
+        // Проверка времени
+        if (_selectedTime != default && _selectedTime < DateTime.Now)
+        {
+            errorMessage = "Нельзя записаться на прошедшее время";
+            isValid = false;
+        }
+
+        // Проверка рабочего времени
+        if (_selectedTime != default)
+        {
+            var hour = _selectedTime.Hour;
+            if (hour < 10 || hour >= 20)
+            {
+                errorMessage = "Запись возможна только с 10:00 до 20:00";
+                isValid = false;
+            }
+
+            if (_selectedTime.Minute % 30 != 0)
+            {
+                errorMessage = "Запись возможна только с интервалом 30 минут";
+                isValid = false;
+            }
+        }
+
+        // Проверка занятости мастера
+        if (isValid && _selectedMasterId > 0 && _selectedTime != default)
+        {
+            if (IsMasterBusy(_selectedMasterId, _selectedTime))
+            {
+                errorMessage = "Мастер уже занят в выбранное время";
+                isValid = false;
+            }
+        }
+
+        return isValid;
+    }
+
+    private async Task SaveReception()
+    {
+        if (!ValidateForm())
+        {
+            StateHasChanged();
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            if (isEditMode)
+            {
+                // Обновление записи
+                var reception = await Context.Receptions
+                    .Include(r => r.Master)
+                    .Include(r => r.Service)
+                    .Include(r => r.Client)
+                    .FirstOrDefaultAsync(r => r.Id == _editingId);
+
+                if (reception == null)
+                {
+                    errorMessage = "Запись не найдена";
+                    return;
+                }
+
+                var updateDto = new AdminUpdateReceptionForAdminDto
+                {
+                    Time = _selectedTime,
+                    MasterId = _selectedMasterId,
+                    ServiceId = _selectedServiceId,
+                    ClientId = _selectedClientId > 0 ? _selectedClientId : null
+                };
+
+                await ReceptionService.UpdateReceptionForAdminAsync(reception, updateDto);
+                await Context.SaveChangesAsync();
+
+                await JS.InvokeVoidAsync("alert", "Запись успешно обновлена!");
+            }
+            else
+            {
+                // Создание новой записи
+                if (_selectedClientId > 0 && _selectedClientId != 0)
+                {
+                    // Запись от мастера для клиента
+                    var createDto = new CreateReceptionByMasterDto
+                    {
+                        Time = _selectedTime,
+                        ClientId = _selectedClientId.Value,
+                        ServiceId = _selectedServiceId
+                    };
+
+                    var newReception = await ReceptionService.CreateReceptionByMasterAsync(createDto, _selectedMasterId);
+                    Context.Receptions.Add(newReception);
+                    await Context.SaveChangesAsync();
+
+                    await JS.InvokeVoidAsync("alert", "Запись успешно создана мастером!");
+                }
+                else
+                {
+                    // Обычная запись (как от клиента)
+                    var createDto = new CreateReceptionDto
+                    {
+                        Time = _selectedTime,
+                        MasterId = _selectedMasterId,
+                        ServiceId = _selectedServiceId
+                    };
+
+                    var newReception = await ReceptionService.CreateReceptionAsync(createDto, 0);
+                    Context.Receptions.Add(newReception);
+                    await Context.SaveChangesAsync();
+
+                    await JS.InvokeVoidAsync("alert", "Запись успешно создана!");
+                }
+            }
+
+            CloseModal();
+            await LoadReceptions();
+        }
+        catch (ArgumentException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        catch (DbUpdateException ex)
+        {
+            var innerMessage = ex.InnerException?.Message ?? ex.Message;
+            errorMessage = $"Ошибка базы данных: {innerMessage}";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ошибка: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteReception(int id)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Вы уверены, что хотите удалить эту запись?"))
+            return;
+
+        try
+        {
+            var reception = await Context.Receptions
+                .Include(r => r.Master)
+                .FirstOrDefaultAsync(r => r.Id == id);
+
+            if (reception != null)
+            {
+                // Проверка, можно ли удалить запись
+                if (reception.Time < DateTime.Now)
+                {
+                    await JS.InvokeVoidAsync("alert", "Нельзя удалить прошедшую запись");
+                    return;
+                }
+
+                Context.Receptions.Remove(reception);
+                await Context.SaveChangesAsync();
+                await LoadReceptions();
+
+                await JS.InvokeVoidAsync("alert", "Запись успешно удалена");
+            }
+        }
+        catch (DbUpdateException ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Ошибка удаления: {ex.InnerException?.Message ?? ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Ошибка: {ex.Message}");
+        }
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        ResetForm();
+        StateHasChanged();
+    }
+}

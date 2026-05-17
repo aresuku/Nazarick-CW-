@@ -1,0 +1,745 @@
+﻿@page "/masters"
+@using HairSalon.Models
+@using HairSalon.DTOs
+@using Microsoft.EntityFrameworkCore
+@inject HairSalon.Data.HairSalonContext Context
+@inject IMasterService MasterService
+@inject IUserService UserService
+@inject IJSRuntime JS
+
+<h1 class="mb-4">Управление мастерами</h1>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <button class="btn btn-primary me-2" @onclick="ShowCreateModal">
+                <i class="fas fa-plus"></i> Новый мастер
+            </button>
+            <button class="btn btn-primary me-2" @onclick="ShowCreateFromUserModal">
+                <i class="fas fa-user-plus"></i> Из существующего пользователя
+            </button>
+            <button class="btn btn-secondary" @onclick="LoadMasters">
+                <i class="fas fa-sync-alt"></i> Обновить
+            </button>
+        </div>
+        <div class="d-flex gap-2">
+            <input type="text" class="form-control" placeholder="Поиск..." style="width: 200px;" @bind="searchText" @oninput="FilterMasters" />
+        </div>
+    </div>
+    <div class="card-body">
+        @if (_masters == null)
+        {
+            <div class="text-center p-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+        }
+        else if (!_displayMasters.Any())
+        {
+            <div class="alert alert-info text-center">
+                <i class="fas fa-info-circle"></i> Нет мастеров для отображения
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>ФИО</th>
+                            <th>Опыт</th>
+                            <th>Пол</th>
+                            <th>Email</th>
+                            <th>Связанный пользователь</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var master in _displayMasters)
+                        {
+                            <tr>
+                                <td>@master.Id</td>
+                                <td>
+                                    <strong>@master.FirstName @master.LastName</strong><br />
+                                    @{
+                                        var description = master.Description ?? "";
+                                        var shortDescription = description.Length > 50 ? description.Substring(0, 50) + "..." : description;
+                                    }
+                                    <small class="text-muted">@shortDescription</small>
+                                </td>
+                                <td>@master.Experience</td>
+                                <td>
+                                    @if (master.Gender == "М")
+                                    {
+                                        <span class="badge bg-primary">Мужской</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">Женский</span>
+                                    }
+                                </td>
+                                <td>@master.Email</td>
+                                <td>
+                                    @if (master.User != null)
+                                    {
+                                        <span class="text-success">@master.User.Login</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-danger">Не связан</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-danger" @onclick="() => DeleteMaster(master.Id)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Модальное окно создания нового мастера (с нуля) -->
+<div class="modal fade @(showCreateModal ? "show d-block" : "")" id="createMasterModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить нового мастера</h5>
+                <button type="button" class="btn-close" @onclick="CloseCreateModal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(createErrorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="fas fa-exclamation-circle me-2"></i> @createErrorMessage
+                        <button type="button" class="btn-close" @onclick="() => createErrorMessage = null"></button>
+                    </div>
+                }
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Имя <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control @(firstNameError ? "is-invalid" : "")"
+                               @bind="_newMaster.FirstName" @bind:event="oninput" />
+                        @if (firstNameError)
+                        {
+                            <div class="invalid-feedback">Имя обязательно для заполнения</div>
+                        }
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Фамилия <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control @(lastNameError ? "is-invalid" : "")"
+                               @bind="_newMaster.LastName" @bind:event="oninput" />
+                        @if (lastNameError)
+                        {
+                            <div class="invalid-feedback">Фамилия обязательна для заполнения</div>
+                        }
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Опыт работы <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control @(experienceError ? "is-invalid" : "")"
+                               @bind="_newMaster.Experience" @bind:event="oninput" placeholder="например: 5 лет" />
+                        @if (experienceError)
+                        {
+                            <div class="invalid-feedback">Опыт работы обязателен</div>
+                        }
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Пол <span class="text-danger">*</span></label>
+                        <select class="form-select @(genderError ? "is-invalid" : "")" @bind="_newMaster.Gender">
+                            <option value="М">Мужской</option>
+                            <option value="Ж">Женский</option>
+                        </select>
+                        @if (genderError)
+                        {
+                            <div class="invalid-feedback">Выберите пол</div>
+                        }
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Email <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control @(emailError ? "is-invalid" : "")"
+                               @bind="_newMaster.Email" @bind:event="oninput" />
+                        @if (emailError)
+                        {
+                            <div class="invalid-feedback">Введите корректный email</div>
+                        }
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Пароль <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control @(passwordError ? "is-invalid" : "")"
+                               @bind="_newMaster.Password" @bind:event="oninput" />
+                        @if (passwordError)
+                        {
+                            <div class="invalid-feedback">Пароль обязателен (минимум 6 символов)</div>
+                        }
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Описание</label>
+                    <textarea class="form-control" rows="3" @bind="_newMaster.Description"
+                              placeholder="Краткая информация о мастере..."></textarea>
+                </div>
+
+                <div class="alert alert-info small">
+                    <i class="fas fa-info-circle"></i> При создании мастера автоматически будет создан пользователь с ролью "Master"
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseCreateModal">Отмена</button>
+                <button type="button" class="btn btn-primary" @onclick="CreateMaster" @disabled="isCreating">
+                    @if (isCreating)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно создания мастера из существующего пользователя -->
+<div class="modal fade @(showCreateFromUserModal ? "show d-block" : "")" id="createFromUserModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h5 class="modal-title">Создать мастера из пользователя</h5>
+                <button type="button" class="btn-close" @onclick="CloseCreateFromUserModal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(createFromUserErrorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="fas fa-exclamation-circle me-2"></i> @createFromUserErrorMessage
+                        <button type="button" class="btn-close" @onclick="() => createFromUserErrorMessage = null"></button>
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Выберите пользователя <span class="text-danger">*</span></label>
+                    <select class="form-select @(selectedUserId == 0 ? "is-invalid" : "")" @bind="selectedUserId">
+                        <option value="0">-- Выберите пользователя --</option>
+                        @foreach (var user in _availableUsers)
+                        {
+                            <option value="@user.Id">@user.Username (@user.Login) - @user.Role</option>
+                        }
+                    </select>
+                    @if (selectedUserId == 0)
+                    {
+                        <div class="invalid-feedback">Выберите пользователя</div>
+                    }
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Имя <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control @(firstNameFromUserError ? "is-invalid" : "")"
+                               @bind="_createFromUser.FirstName" @bind:event="oninput" />
+                        @if (firstNameFromUserError)
+                        {
+                            <div class="invalid-feedback">Имя обязательно для заполнения</div>
+                        }
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Фамилия <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control @(lastNameFromUserError ? "is-invalid" : "")"
+                               @bind="_createFromUser.LastName" @bind:event="oninput" />
+                        @if (lastNameFromUserError)
+                        {
+                            <div class="invalid-feedback">Фамилия обязательна для заполнения</div>
+                        }
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Опыт работы <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control @(experienceFromUserError ? "is-invalid" : "")"
+                               @bind="_createFromUser.Experience" @bind:event="oninput" placeholder="например: 5 лет" />
+                        @if (experienceFromUserError)
+                        {
+                            <div class="invalid-feedback">Опыт работы обязателен</div>
+                        }
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Пол <span class="text-danger">*</span></label>
+                        <select class="form-select @(genderFromUserError ? "is-invalid" : "")" @bind="_createFromUser.Gender">
+                            <option value="М">Мужской</option>
+                            <option value="Ж">Женский</option>
+                        </select>
+                        @if (genderFromUserError)
+                        {
+                            <div class="invalid-feedback">Выберите пол</div>
+                        }
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Описание</label>
+                    <textarea class="form-control" rows="3" @bind="_createFromUser.Description"
+                              placeholder="Краткая информация о мастере..."></textarea>
+                </div>
+
+                <div class="alert alert-warning small">
+                    <i class="fas fa-exclamation-triangle"></i> После создания мастер будет связан с выбранным пользователем,
+                    а роль пользователя изменится на "Master"
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseCreateFromUserModal">Отмена</button>
+                <button type="button" class="btn btn-primary" @onclick="CreateMasterFromUser" @disabled="isCreatingFromUser">
+                    @if (isCreatingFromUser)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    Создать
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<AdminMasterDto> _masters = new();
+    private List<AdminMasterDto> _displayMasters = new();
+    private List<AdminUserDto> _availableUsers = new();
+    private string searchText = string.Empty;
+
+    // Переменные для создания мастера с нуля
+    private bool showCreateModal = false;
+    private bool isCreating = false;
+    private string createErrorMessage = string.Empty;
+    private CreateMasterDto _newMaster = new();
+
+    // Валидация для создания с нуля
+    private bool firstNameError = false;
+    private bool lastNameError = false;
+    private bool experienceError = false;
+    private bool genderError = false;
+    private bool emailError = false;
+    private bool passwordError = false;
+
+    // Переменные для создания из существующего пользователя
+    private bool showCreateFromUserModal = false;
+    private bool isCreatingFromUser = false;
+    private string createFromUserErrorMessage = string.Empty;
+    private CreateMasterFromUserDto _createFromUser = new();
+    private int selectedUserId = 0;
+
+    // Валидация для создания из пользователя
+    private bool firstNameFromUserError = false;
+    private bool lastNameFromUserError = false;
+    private bool experienceFromUserError = false;
+    private bool genderFromUserError = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMasters();
+        await LoadAvailableUsers();
+    }
+
+    private async Task LoadMasters()
+    {
+        try
+        {
+            var mastersFromDb = await Context.Masters
+                .Include(m => m.User)
+                .ToListAsync();
+            _masters = (await MasterService.GetFormattedMastersForAdminAsync(mastersFromDb)).ToList();
+            FilterMasters();
+        }
+        catch (Exception ex)
+        {
+            createErrorMessage = $"Ошибка загрузки мастеров: {ex.Message}";
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadAvailableUsers()
+    {
+        try
+        {
+            var allUsers = await Context.Users.ToListAsync();
+            var masterUserIds = _masters.Where(m => m.User != null).Select(m => m.User.Id).ToList();
+
+            _availableUsers = allUsers
+                .Where(u => !masterUserIds.Contains(u.UserId))
+                .Select(u => new AdminUserDto
+                {
+                    Id = u.UserId,
+                    Login = u.Login,
+                    Username = u.Username,
+                    Email = u.Email,
+                    Role = u.Role,
+                    IsActive = u.IsActive,
+                    DisplayInfo = $"{u.UserId}|{u.Login} [{u.Role}] - {u.Username}"
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            createFromUserErrorMessage = $"Ошибка загрузки пользователей: {ex.Message}";
+        }
+        StateHasChanged();
+    }
+
+    private void FilterMasters()
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            _displayMasters = _masters.ToList();
+        }
+        else
+        {
+            _displayMasters = _masters
+                .Where(m => (m.FirstName?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                           (m.LastName?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                           ((m.FirstName + " " + m.LastName).Contains(searchText, StringComparison.OrdinalIgnoreCase)) ||
+                           (m.Email?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                           (m.User?.Login?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    private void ShowCreateModal()
+    {
+        ResetCreateForm();
+        showCreateModal = true;
+        StateHasChanged();
+    }
+
+    private void ShowCreateFromUserModal()
+    {
+        ResetCreateFromUserForm();
+        showCreateFromUserModal = true;
+        StateHasChanged();
+    }
+
+    private void ResetCreateForm()
+    {
+        _newMaster = new CreateMasterDto
+        {
+            FirstName = "",
+            LastName = "",
+            Experience = "",
+            Gender = "М",
+            Email = "",
+            Password = "",
+            Description = ""
+        };
+        createErrorMessage = string.Empty;
+        firstNameError = false;
+        lastNameError = false;
+        experienceError = false;
+        genderError = false;
+        emailError = false;
+        passwordError = false;
+    }
+
+    private void ResetCreateFromUserForm()
+    {
+        _createFromUser = new CreateMasterFromUserDto
+        {
+            UserId = 0,
+            FirstName = "",
+            LastName = "",
+            Experience = "",
+            Gender = "М",
+            Description = ""
+        };
+        selectedUserId = 0;
+        createFromUserErrorMessage = string.Empty;
+        firstNameFromUserError = false;
+        lastNameFromUserError = false;
+        experienceFromUserError = false;
+        genderFromUserError = false;
+    }
+
+    private bool ValidateCreateForm()
+    {
+        bool isValid = true;
+
+        if (string.IsNullOrWhiteSpace(_newMaster.FirstName))
+        {
+            firstNameError = true;
+            isValid = false;
+        }
+        else
+        {
+            firstNameError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newMaster.LastName))
+        {
+            lastNameError = true;
+            isValid = false;
+        }
+        else
+        {
+            lastNameError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newMaster.Experience))
+        {
+            experienceError = true;
+            isValid = false;
+        }
+        else
+        {
+            experienceError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newMaster.Email) || !_newMaster.Email.Contains("@"))
+        {
+            emailError = true;
+            isValid = false;
+        }
+        else
+        {
+            emailError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newMaster.Password) || _newMaster.Password.Length < 6)
+        {
+            passwordError = true;
+            isValid = false;
+        }
+        else
+        {
+            passwordError = false;
+        }
+
+        return isValid;
+    }
+
+    private bool ValidateCreateFromUserForm()
+    {
+        bool isValid = true;
+
+        if (selectedUserId == 0)
+        {
+            isValid = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_createFromUser.FirstName))
+        {
+            firstNameFromUserError = true;
+            isValid = false;
+        }
+        else
+        {
+            firstNameFromUserError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_createFromUser.LastName))
+        {
+            lastNameFromUserError = true;
+            isValid = false;
+        }
+        else
+        {
+            lastNameFromUserError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_createFromUser.Experience))
+        {
+            experienceFromUserError = true;
+            isValid = false;
+        }
+        else
+        {
+            experienceFromUserError = false;
+        }
+
+        return isValid;
+    }
+
+    private async Task CreateMaster()
+    {
+        if (!ValidateCreateForm())
+        {
+            StateHasChanged();
+            return;
+        }
+
+        isCreating = true;
+        createErrorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var newMaster = await MasterService.CreateMasterWithUserAsync(_newMaster, UserService);
+
+            using var transaction = await Context.Database.BeginTransactionAsync();
+            try
+            {
+                Context.Users.Add(newMaster.User);
+                await Context.SaveChangesAsync();
+
+                newMaster.UserId = newMaster.User.UserId;
+                Context.Masters.Add(newMaster);
+                await Context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                await LoadMasters();
+                await LoadAvailableUsers();
+                CloseCreateModal();
+
+                await JS.InvokeVoidAsync("alert", "Мастер успешно создан!");
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            createErrorMessage = $"Ошибка валидации: {ex.Message}";
+        }
+        catch (InvalidOperationException ex)
+        {
+            createErrorMessage = ex.Message;
+        }
+        catch (DbUpdateException ex)
+        {
+            var innerMessage = ex.InnerException?.Message ?? ex.Message;
+            if (innerMessage.Contains("IX_Masters_Email"))
+                createErrorMessage = "Мастер с таким email уже существует";
+            else if (innerMessage.Contains("IX_Users_Login"))
+                createErrorMessage = "Пользователь с таким логином уже существует";
+            else
+                createErrorMessage = $"Ошибка базы данных: {innerMessage}";
+        }
+        catch (Exception ex)
+        {
+            createErrorMessage = $"Неизвестная ошибка: {ex.Message}";
+        }
+        finally
+        {
+            isCreating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CreateMasterFromUser()
+    {
+        if (!ValidateCreateFromUserForm())
+        {
+            StateHasChanged();
+            return;
+        }
+
+        isCreatingFromUser = true;
+        createFromUserErrorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            _createFromUser.UserId = selectedUserId;
+
+            var newMaster = await MasterService.CreateMasterFromUserAsync(_createFromUser);
+
+            Context.Masters.Add(newMaster);
+            await Context.SaveChangesAsync();
+
+            await LoadMasters();
+            await LoadAvailableUsers();
+            CloseCreateFromUserModal();
+
+            await JS.InvokeVoidAsync("alert", "Мастер успешно создан из существующего пользователя!");
+        }
+        catch (ArgumentException ex)
+        {
+            createFromUserErrorMessage = $"Ошибка валидации: {ex.Message}";
+        }
+        catch (InvalidOperationException ex)
+        {
+            createFromUserErrorMessage = ex.Message;
+        }
+        catch (DbUpdateException ex)
+        {
+            var innerMessage = ex.InnerException?.Message ?? ex.Message;
+            if (innerMessage.Contains("IX_Masters_Email"))
+                createFromUserErrorMessage = "Мастер с таким email уже существует";
+            else
+                createFromUserErrorMessage = $"Ошибка базы данных: {innerMessage}";
+        }
+        catch (Exception ex)
+        {
+            createFromUserErrorMessage = $"Неизвестная ошибка: {ex.Message}";
+        }
+        finally
+        {
+            isCreatingFromUser = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteMaster(int id)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Вы уверены, что хотите удалить мастера?"))
+            return;
+
+        try
+        {
+            var master = await Context.Masters
+                .Include(m => m.User)
+                .FirstOrDefaultAsync(m => m.MasterId == id);
+
+            if (master != null)
+            {
+                await MasterService.DeleteMasterAsync(master, true);
+                await Context.SaveChangesAsync();
+
+                await LoadMasters();
+                await LoadAvailableUsers();
+
+                await JS.InvokeVoidAsync("alert", "Мастер успешно удален");
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            await JS.InvokeVoidAsync("alert", ex.Message);
+        }
+        catch (DbUpdateException ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Ошибка удаления: {ex.InnerException?.Message ?? ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Ошибка: {ex.Message}");
+        }
+    }
+
+    private void CloseCreateModal()
+    {
+        showCreateModal = false;
+        ResetCreateForm();
+        StateHasChanged();
+    }
+
+    private void CloseCreateFromUserModal()
+    {
+        showCreateFromUserModal = false;
+        ResetCreateFromUserForm();
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,339 @@
+﻿@page "/services"
+@using HairSalon.Models
+@using HairSalon.DTOs
+@using Microsoft.EntityFrameworkCore
+@inject HairSalon.Data.HairSalonContext Context
+@inject IServiceService ServiceService
+@inject IJSRuntime JS
+
+<h1 class="mb-4">Управление услугами</h1>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <button class="btn btn-primary me-2" @onclick="ShowCreateModal">
+                <i class="fas fa-plus"></i> Новая услуга
+            </button>
+            <button class="btn btn-secondary" @onclick="LoadServices">
+                <i class="fas fa-sync-alt"></i> Обновить
+            </button>
+        </div>
+        <div class="d-flex gap-2">
+            <input type="text" class="form-control" placeholder="Поиск..." style="width: 200px;" @bind="searchText" @oninput="FilterServices" />
+        </div>
+    </div>
+    <div class="card-body">
+        @if (_services == null)
+        {
+            <div class="text-center p-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+        }
+        else if (!_displayServices.Any())
+        {
+            <div class="alert alert-info text-center">
+                <i class="fas fa-info-circle"></i> Нет услуг для отображения
+            </div>
+        }
+        else
+        {
+            <div class="row">
+                @foreach (var service in _displayServices)
+                {
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100 shadow-sm border-0 rounded-4 bg-white">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <h5 class="card-title mb-0">@service.Name</h5>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteService(service.Id)">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                <hr />
+                                <p class="card-text">
+                                    <strong>Цена:</strong> @service.Price.ToString("N0") ₽
+                                </p>
+                                @if (!string.IsNullOrEmpty(service.Description))
+                                {
+                                    <p class="card-text">
+                                        <strong>Описание:</strong><br />
+                                        <small class="text-muted">@service.Description</small>
+                                    </p>
+                                }
+                                else
+                                {
+                                    <p class="card-text text-muted">
+                                        <em>Нет описания</em>
+                                    </p>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Модальное окно создания услуги -->
+<div class="modal fade @(showModal ? "show d-block" : "")" id="serviceModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить новую услугу</h5>
+                <button type="button" class="btn-close" @onclick="CloseModal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="fas fa-exclamation-circle me-2"></i> @errorMessage
+                        <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Название услуги <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control @(nameError ? "is-invalid" : "")"
+                           @bind="_newServiceName" @bind:event="oninput"
+                           placeholder="например: Стрижка, Окрашивание, Укладка" />
+                    @if (nameError)
+                    {
+                        <div class="invalid-feedback">Название услуги обязательно для заполнения</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Цена <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <input type="number" class="form-control @(priceError ? "is-invalid" : "")"
+                               @bind="_newServicePrice" @bind:event="oninput"
+                               placeholder="0" step="100" min="0" />
+                        <span class="input-group-text">₽</span>
+                        @if (priceError)
+                        {
+                            <div class="invalid-feedback">Цена должна быть больше 0</div>
+                        }
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Описание</label>
+                    <textarea class="form-control" rows="4" @bind="_newServiceDescription"
+                              placeholder="Краткое описание услуги, особенности, преимущества..."></textarea>
+                    <small style="color: #ced4da;">Необязательное поле</small>
+                </div>
+
+                <div class="alert alert-info small">
+                    <i class="fas fa-info-circle"></i> Название услуги должно быть уникальным
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseModal">Отмена</button>
+                <button type="button" class="btn btn-primary" @onclick="CreateService" @disabled="isLoading">
+                    @if (isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<ServiceDto> _services = new();
+    private List<ServiceDto> _displayServices = new();
+    private string searchText = string.Empty;
+
+    private bool showModal = false;
+    private bool isLoading = false;
+    private string errorMessage = string.Empty;
+
+    private string _newServiceName = string.Empty;
+    private decimal _newServicePrice = 0;
+    private string _newServiceDescription = string.Empty;
+
+    // Валидация
+    private bool nameError = false;
+    private bool priceError = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadServices();
+    }
+
+    private async Task LoadServices()
+    {
+        try
+        {
+            var services = await Context.Services.ToListAsync();
+            _services = (await ServiceService.GetFormattedServicesForAdminAsync(services)).ToList();
+            FilterServices();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ошибка загрузки услуг: {ex.Message}";
+        }
+        StateHasChanged();
+    }
+
+    private void FilterServices()
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            _displayServices = _services.ToList();
+        }
+        else
+        {
+            _displayServices = _services
+                .Where(s => s.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                           (s.Description != null && s.Description.Contains(searchText, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    private void ShowCreateModal()
+    {
+        ResetForm();
+        showModal = true;
+        StateHasChanged();
+    }
+
+    private void ResetForm()
+    {
+        _newServiceName = string.Empty;
+        _newServicePrice = 0;
+        _newServiceDescription = string.Empty;
+        errorMessage = string.Empty;
+        nameError = false;
+        priceError = false;
+    }
+
+    private bool ValidateForm()
+    {
+        bool isValid = true;
+
+        if (string.IsNullOrWhiteSpace(_newServiceName))
+        {
+            nameError = true;
+            isValid = false;
+        }
+        else
+        {
+            nameError = false;
+        }
+
+        if (_newServicePrice <= 0)
+        {
+            priceError = true;
+            isValid = false;
+        }
+        else
+        {
+            priceError = false;
+        }
+
+        return isValid;
+    }
+
+    private async Task CreateService()
+    {
+        if (!ValidateForm())
+        {
+            StateHasChanged();
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var createDto = new CreateServiceDto
+            {
+                Name = _newServiceName.Trim(),
+                Price = _newServicePrice,
+                Description = string.IsNullOrWhiteSpace(_newServiceDescription) ? null : _newServiceDescription.Trim()
+            };
+
+            var newService = await ServiceService.CreateServiceAsync(createDto);
+            Context.Services.Add(newService);
+            await Context.SaveChangesAsync();
+
+            await LoadServices();
+            CloseModal();
+
+            await JS.InvokeVoidAsync("alert", "Услуга успешно создана!");
+        }
+        catch (ArgumentException ex)
+        {
+            errorMessage = $"Ошибка валидации: {ex.Message}";
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        catch (DbUpdateException ex)
+        {
+            var innerMessage = ex.InnerException?.Message ?? ex.Message;
+            if (innerMessage.Contains("IX_Services_Name"))
+                errorMessage = "Услуга с таким названием уже существует";
+            else
+                errorMessage = $"Ошибка базы данных: {innerMessage}";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Неизвестная ошибка: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteService(int id)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Вы уверены, что хотите удалить услугу?{(id <= 3 ? " (Внимание: это демо-услуга)" : "")}"))
+            return;
+
+        try
+        {
+            var service = await Context.Services.FindAsync(id);
+            if (service != null)
+            {
+                await ServiceService.DeleteServiceAsync(service);
+                Context.Services.Remove(service);
+                await Context.SaveChangesAsync();
+
+                await LoadServices();
+                await JS.InvokeVoidAsync("alert", "Услуга успешно удалена");
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            await JS.InvokeVoidAsync("alert", ex.Message);
+        }
+        catch (DbUpdateException ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Ошибка удаления: {ex.InnerException?.Message ?? ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Ошибка: {ex.Message}");
+        }
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        ResetForm();
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,903 @@
+﻿@page "/users"
+@using HairSalon.Models
+@using HairSalon.DTOs
+@using Microsoft.EntityFrameworkCore
+@inject HairSalon.Data.HairSalonContext Context
+@inject IUserService UserService
+@inject IJSRuntime JS
+
+<h1 class="mb-4">Управление пользователями</h1>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <button class="btn btn-primary me-2" @onclick="ShowCreateModal">
+                <i class="fas fa-plus"></i> Новый пользователь
+            </button>
+            <button class="btn btn-secondary" @onclick="LoadUsers">
+                <i class="fas fa-sync-alt"></i> Обновить
+            </button>
+        </div>
+        <div class="d-flex gap-2">
+            <input type="text" class="form-control" placeholder="Поиск..." style="width: 250px;" @bind="searchText" @bind:event="oninput" />
+        </div>
+    </div>
+    <div class="card-body">
+        @if (_users == null)
+        {
+            <div class="text-center p-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Загрузка...</span>
+                </div>
+            </div>
+        }
+        else if (!_displayUsers.Any())
+        {
+            <div class="alert alert-info text-center">
+                <i class="fas fa-info-circle"></i> Нет пользователей для отображения
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Логин</th>
+                            <th>Имя пользователя</th>
+                            <th>Email</th>
+                            <th>Роль</th>
+                            <th>Статус</th>
+                            <th>Связанный мастер</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in _displayUsers)
+                        {
+                            <tr>
+                                <td>@user.Id</td>
+                                <td>@user.Login</td>
+                                <td>@user.Username</td>
+                                <td>@user.Email</td>
+                                <td>
+                                    @if (user.Role == "Admin")
+                                    {
+                                        <span class="badge bg-danger">Admin</span>
+                                    }
+                                    else if (user.Role == "Master")
+                                    {
+                                        <span class="badge bg-primary">Master</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">User</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (user.IsActive)
+                                    {
+                                        <span class="badge bg-success">Активен</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">Заблокирован</span>
+                                    }
+                                </td>
+                                <td>
+                                    @{
+                                        var isMaster = _masterUserIds.Contains(user.Id);
+                                    }
+                                    @if (isMaster)
+                                    {
+                                        <span class="text-success">
+                                            <i class="fas fa-check-circle"></i> Связан
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">
+                                            <i class="fas fa-times-circle"></i> Не связан
+                                        </span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-primary" @onclick="() => ShowEditModal(user)">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-outline-danger" @onclick="() => DeleteUser(user.Id)" disabled="@(user.Role == "Admin" && _users.Count(u => u.Role == "Admin") == 1)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Модальное окно создания пользователя -->
+<div class="modal fade @(showCreateModal ? "show d-block" : "")" id="createUserModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить нового пользователя</h5>
+                <button type="button" class="btn-close" @onclick="CloseCreateModal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(createErrorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="fas fa-exclamation-circle me-2"></i> @createErrorMessage
+                        <button type="button" class="btn-close" @onclick="() => createErrorMessage = null"></button>
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Логин <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control @(loginError ? "is-invalid" : "")"
+                           @bind="_newUser.Login" @bind:event="oninput"
+                           placeholder="Введите логин" />
+                    @if (loginError)
+                    {
+                        <div class="invalid-feedback">Логин обязателен для заполнения</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Пароль <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control @(passwordError ? "is-invalid" : "")"
+                           @bind="_newUser.Password" @bind:event="oninput"
+                           placeholder="Минимум 6 символов" />
+                    @if (passwordError)
+                    {
+                        <div class="invalid-feedback">Пароль обязателен (минимум 6 символов)</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Имя пользователя <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control @(usernameError ? "is-invalid" : "")"
+                           @bind="_newUser.Username" @bind:event="oninput"
+                           placeholder="Отображаемое имя" />
+                    @if (usernameError)
+                    {
+                        <div class="invalid-feedback">Имя пользователя обязательно</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Email <span class="text-danger">*</span></label>
+                    <input type="email" class="form-control @(emailError ? "is-invalid" : "")"
+                           @bind="_newUser.Email" @bind:event="oninput"
+                           placeholder="user@example.com" />
+                    @if (emailError)
+                    {
+                        <div class="invalid-feedback">Введите корректный email</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Роль</label>
+                    <select class="form-select" @bind="_newUser.Role">
+                        <option value="User">Пользователь</option>
+                        <option value="Master">Мастер</option>
+                        <option value="Admin">Администратор</option>
+                    </select>
+                    <small class="text-muted">Роль определяет доступ к функциям системы</small>
+                </div>
+
+                <div class="alert alert-info small">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Примечание:</strong> Пользователи с ролью "Master" могут быть связаны с мастерами
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseCreateModal">Отмена</button>
+                <button type="button" class="btn btn-primary" @onclick="CreateUser" @disabled="isCreating">
+                    @if (isCreating)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно редактирования пользователя -->
+<div class="modal fade @(showEditModal ? "show d-block" : "")" id="editUserModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h5 class="modal-title">Редактирование пользователя</h5>
+                <button type="button" class="btn-close" @onclick="CloseEditModal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(editErrorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="fas fa-exclamation-circle me-2"></i> @editErrorMessage
+                        <button type="button" class="btn-close" @onclick="() => editErrorMessage = null"></button>
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">ID</label>
+                    <input type="text" class="form-control" value="@_editingUser.Id" disabled />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Логин</label>
+                    <input type="text" class="form-control @(editLoginError ? "is-invalid" : "")"
+                           @bind="_editingUser.Login" @bind:event="oninput" />
+                    @if (editLoginError)
+                    {
+                        <div class="invalid-feedback">Логин обязателен</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Новый пароль</label>
+                    <input type="password" class="form-control @(editPasswordError ? "is-invalid" : "")"
+                           @bind="_newPassword" @bind:event="oninput"
+                           placeholder="Оставьте пустым, чтобы не менять" />
+                    @if (editPasswordError)
+                    {
+                        <div class="invalid-feedback">Пароль должен быть не менее 6 символов</div>
+                    }
+                    <small class="text-muted">Минимум 6 символов</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Имя пользователя</label>
+                    <input type="text" class="form-control @(editUsernameError ? "is-invalid" : "")"
+                           @bind="_editingUser.Username" @bind:event="oninput" />
+                    @if (editUsernameError)
+                    {
+                        <div class="invalid-feedback">Имя пользователя обязательно</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-control @(editEmailError ? "is-invalid" : "")"
+                           @bind="_editingUser.Email" @bind:event="oninput" />
+                    @if (editEmailError)
+                    {
+                        <div class="invalid-feedback">Введите корректный email</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Роль</label>
+                    <select class="form-select" @bind="_editingUser.Role">
+                        <option value="User">Пользователь</option>
+                        <option value="Master">Мастер</option>
+                        <option value="Admin">Администратор</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Статус</label>
+                    <select class="form-select" @bind="_editingUser.IsActive">
+                        <option value="true">Активен</option>
+                        <option value="false">Заблокирован</option>
+                    </select>
+                </div>
+
+                @if (_editingUser.Role == "Master")
+                {
+                    <div class="alert alert-warning small">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Внимание:</strong> При изменении роли мастера, связь с существующим мастером может быть нарушена
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">Отмена</button>
+                <button type="button" class="btn btn-primary" @onclick="UpdateUser" @disabled="isUpdating">
+                    @if (isUpdating)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно смены пароля -->
+<div class="modal fade @(showPasswordModal ? "show d-block" : "")" id="passwordModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h5 class="modal-title">Смена пароля</h5>
+                <button type="button" class="btn-close" @onclick="ClosePasswordModal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(passwordErrorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="fas fa-exclamation-circle me-2"></i> @passwordErrorMessage
+                        <button type="button" class="btn-close" @onclick="() => passwordErrorMessage = null"></button>
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Пользователь</label>
+                    <input type="text" class="form-control" value="@_passwordUserId" disabled />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Текущий пароль <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control @(currentPasswordError ? "is-invalid" : "")"
+                           @bind="_currentPassword" @bind:event="oninput" />
+                    @if (currentPasswordError)
+                    {
+                        <div class="invalid-feedback">Введите текущий пароль</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Новый пароль <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control @(newPasswordError ? "is-invalid" : "")"
+                           @bind="_newPasswordForChange" @bind:event="oninput" />
+                    @if (newPasswordError)
+                    {
+                        <div class="invalid-feedback">Новый пароль должен быть не менее 6 символов</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Подтверждение пароля <span class="text-danger">*</span></label>
+                    <input type="password" class="form-control @(confirmPasswordError ? "is-invalid" : "")"
+                           @bind="_confirmPassword" @bind:event="oninput" />
+                    @if (confirmPasswordError)
+                    {
+                        <div class="invalid-feedback">Пароли не совпадают</div>
+                    }
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="ClosePasswordModal">Отмена</button>
+                <button type="button" class="btn btn-primary" @onclick="ChangePassword" @disabled="isChangingPassword">
+                    @if (isChangingPassword)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    Сменить пароль
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<AdminUserDto> _users = new();
+    private List<AdminUserDto> _displayUsers = new();
+    private List<int> _masterUserIds = new();
+    private string searchText = string.Empty;
+
+    // Переменные для создания пользователя
+    private bool showCreateModal = false;
+    private bool isCreating = false;
+    private string createErrorMessage = string.Empty;
+    private CreateUserDto _newUser = new();
+
+    // Валидация создания
+    private bool loginError = false;
+    private bool passwordError = false;
+    private bool usernameError = false;
+    private bool emailError = false;
+
+    // Переменные для редактирования пользователя
+    private bool showEditModal = false;
+    private bool isUpdating = false;
+    private string editErrorMessage = string.Empty;
+    private AdminUserDto _editingUser = new();
+    private string _newPassword = string.Empty;
+
+    // Валидация редактирования
+    private bool editLoginError = false;
+    private bool editPasswordError = false;
+    private bool editUsernameError = false;
+    private bool editEmailError = false;
+
+    // Переменные для смены пароля
+    private bool showPasswordModal = false;
+    private bool isChangingPassword = false;
+    private string passwordErrorMessage = string.Empty;
+    private int _passwordUserId = 0;
+    private string _currentPassword = string.Empty;
+    private string _newPasswordForChange = string.Empty;
+    private string _confirmPassword = string.Empty;
+
+    // Валидация смены пароля
+    private bool currentPasswordError = false;
+    private bool newPasswordError = false;
+    private bool confirmPasswordError = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        try
+        {
+            var usersFromDb = await Context.Users.ToListAsync();
+            _users = (await UserService.GetFormattedUsersForAdminAsync(usersFromDb)).ToList();
+
+            // Загружаем ID пользователей, связанных с мастерами
+            var masters = await Context.Masters.ToListAsync();
+            _masterUserIds = masters.Select(m => m.UserId).ToList();
+
+            FilterUsers();
+        }
+        catch (Exception ex)
+        {
+            createErrorMessage = $"Ошибка загрузки пользователей: {ex.Message}";
+        }
+        StateHasChanged();
+    }
+
+    private void FilterUsers()
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            _displayUsers = _users.ToList();
+        }
+        else
+        {
+            _displayUsers = _users
+                .Where(u => u.Login.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                           u.Username.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                           u.Email.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    private void ShowCreateModal()
+    {
+        ResetCreateForm();
+        showCreateModal = true;
+        StateHasChanged();
+    }
+
+    private void ShowEditModal(AdminUserDto user)
+    {
+        ResetEditForm();
+        _editingUser = new AdminUserDto
+        {
+            Id = user.Id,
+            Login = user.Login,
+            Username = user.Username,
+            Email = user.Email,
+            Role = user.Role,
+            IsActive = user.IsActive
+        };
+        _newPassword = string.Empty;
+        showEditModal = true;
+        StateHasChanged();
+    }
+
+    private void ShowPasswordModal(int userId)
+    {
+        _passwordUserId = userId;
+        _currentPassword = string.Empty;
+        _newPasswordForChange = string.Empty;
+        _confirmPassword = string.Empty;
+        passwordErrorMessage = string.Empty;
+        currentPasswordError = false;
+        newPasswordError = false;
+        confirmPasswordError = false;
+        showPasswordModal = true;
+        StateHasChanged();
+    }
+
+    private void ResetCreateForm()
+    {
+        _newUser = new CreateUserDto
+        {
+            Login = "",
+            Password = "",
+            Username = "",
+            Email = "",
+            Role = "User"
+        };
+        createErrorMessage = string.Empty;
+        loginError = false;
+        passwordError = false;
+        usernameError = false;
+        emailError = false;
+    }
+
+    private void ResetEditForm()
+    {
+        editErrorMessage = string.Empty;
+        editLoginError = false;
+        editPasswordError = false;
+        editUsernameError = false;
+        editEmailError = false;
+    }
+
+    private bool ValidateCreateForm()
+    {
+        bool isValid = true;
+
+        if (string.IsNullOrWhiteSpace(_newUser.Login))
+        {
+            loginError = true;
+            isValid = false;
+        }
+        else
+        {
+            loginError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newUser.Password) || _newUser.Password.Length < 6)
+        {
+            passwordError = true;
+            isValid = false;
+        }
+        else
+        {
+            passwordError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newUser.Username))
+        {
+            usernameError = true;
+            isValid = false;
+        }
+        else
+        {
+            usernameError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newUser.Email) || !_newUser.Email.Contains("@"))
+        {
+            emailError = true;
+            isValid = false;
+        }
+        else
+        {
+            emailError = false;
+        }
+
+        return isValid;
+    }
+
+    private bool ValidateEditForm()
+    {
+        bool isValid = true;
+
+        if (string.IsNullOrWhiteSpace(_editingUser.Login))
+        {
+            editLoginError = true;
+            isValid = false;
+        }
+        else
+        {
+            editLoginError = false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_newPassword) && _newPassword.Length < 6)
+        {
+            editPasswordError = true;
+            isValid = false;
+        }
+        else
+        {
+            editPasswordError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_editingUser.Username))
+        {
+            editUsernameError = true;
+            isValid = false;
+        }
+        else
+        {
+            editUsernameError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_editingUser.Email) || !_editingUser.Email.Contains("@"))
+        {
+            editEmailError = true;
+            isValid = false;
+        }
+        else
+        {
+            editEmailError = false;
+        }
+
+        return isValid;
+    }
+
+    private bool ValidatePasswordForm()
+    {
+        bool isValid = true;
+
+        if (string.IsNullOrWhiteSpace(_currentPassword))
+        {
+            currentPasswordError = true;
+            isValid = false;
+        }
+        else
+        {
+            currentPasswordError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newPasswordForChange) || _newPasswordForChange.Length < 6)
+        {
+            newPasswordError = true;
+            isValid = false;
+        }
+        else
+        {
+            newPasswordError = false;
+        }
+
+        if (_newPasswordForChange != _confirmPassword)
+        {
+            confirmPasswordError = true;
+            isValid = false;
+        }
+        else
+        {
+            confirmPasswordError = false;
+        }
+
+        return isValid;
+    }
+
+    private async Task CreateUser()
+    {
+        if (!ValidateCreateForm())
+        {
+            StateHasChanged();
+            return;
+        }
+
+        isCreating = true;
+        createErrorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var newUser = await UserService.CreateUserAsync(_newUser);
+            Context.Users.Add(newUser);
+            await Context.SaveChangesAsync();
+
+            await LoadUsers();
+            CloseCreateModal();
+
+            await JS.InvokeVoidAsync("alert", "Пользователь успешно создан!");
+        }
+        catch (ArgumentException ex)
+        {
+            createErrorMessage = $"Ошибка валидации: {ex.Message}";
+        }
+        catch (InvalidOperationException ex)
+        {
+            createErrorMessage = ex.Message;
+        }
+        catch (DbUpdateException ex)
+        {
+            var innerMessage = ex.InnerException?.Message ?? ex.Message;
+            if (innerMessage.Contains("IX_Users_Login"))
+                createErrorMessage = "Пользователь с таким логином уже существует";
+            else if (innerMessage.Contains("IX_Users_Email"))
+                createErrorMessage = "Пользователь с таким email уже существует";
+            else
+                createErrorMessage = $"Ошибка базы данных: {innerMessage}";
+        }
+        catch (Exception ex)
+        {
+            createErrorMessage = $"Неизвестная ошибка: {ex.Message}";
+        }
+        finally
+        {
+            isCreating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateUser()
+    {
+        if (!ValidateEditForm())
+        {
+            StateHasChanged();
+            return;
+        }
+
+        isUpdating = true;
+        editErrorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var user = await Context.Users.FindAsync(_editingUser.Id);
+            if (user == null)
+            {
+                editErrorMessage = "Пользователь не найден";
+                return;
+            }
+
+            var updateDto = new UpdateUserDto
+            {
+                Login = _editingUser.Login,
+                Username = _editingUser.Username,
+                Email = _editingUser.Email,
+                Role = _editingUser.Role,
+                IsActive = _editingUser.IsActive,
+                Password = string.IsNullOrWhiteSpace(_newPassword) ? null : _newPassword
+            };
+
+            await UserService.UpdateUserAsync(user, updateDto);
+            await Context.SaveChangesAsync();
+
+            await LoadUsers();
+            CloseEditModal();
+
+            await JS.InvokeVoidAsync("alert", "Пользователь успешно обновлен!");
+        }
+        catch (ArgumentException ex)
+        {
+            editErrorMessage = $"Ошибка валидации: {ex.Message}";
+        }
+        catch (InvalidOperationException ex)
+        {
+            editErrorMessage = ex.Message;
+        }
+        catch (DbUpdateException ex)
+        {
+            var innerMessage = ex.InnerException?.Message ?? ex.Message;
+            if (innerMessage.Contains("IX_Users_Login"))
+                editErrorMessage = "Пользователь с таким логином уже существует";
+            else if (innerMessage.Contains("IX_Users_Email"))
+                editErrorMessage = "Пользователь с таким email уже существует";
+            else
+                editErrorMessage = $"Ошибка базы данных: {innerMessage}";
+        }
+        catch (Exception ex)
+        {
+            editErrorMessage = $"Неизвестная ошибка: {ex.Message}";
+        }
+        finally
+        {
+            isUpdating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ChangePassword()
+    {
+        if (!ValidatePasswordForm())
+        {
+            StateHasChanged();
+            return;
+        }
+
+        isChangingPassword = true;
+        passwordErrorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var user = await Context.Users.FindAsync(_passwordUserId);
+            if (user == null)
+            {
+                passwordErrorMessage = "Пользователь не найден";
+                return;
+            }
+
+            await UserService.ChangePasswordAsync(user, _currentPassword, _newPasswordForChange);
+            await Context.SaveChangesAsync();
+
+            ClosePasswordModal();
+
+            await JS.InvokeVoidAsync("alert", "Пароль успешно изменен!");
+        }
+        catch (ArgumentException ex)
+        {
+            passwordErrorMessage = ex.Message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            passwordErrorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            passwordErrorMessage = $"Ошибка: {ex.Message}";
+        }
+        finally
+        {
+            isChangingPassword = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteUser(int id)
+    {
+        var user = _users.FirstOrDefault(u => u.Id == id);
+        if (user == null) return;
+
+        // Проверка, что это не последний администратор
+        if (user.Role == "Admin" && _users.Count(u => u.Role == "Admin") == 1)
+        {
+            await JS.InvokeVoidAsync("alert", "Нельзя удалить последнего администратора!");
+            return;
+        }
+
+        // Проверка, связан ли пользователь с мастером
+        if (_masterUserIds.Contains(id))
+        {
+            if (!await JS.InvokeAsync<bool>("confirm", "Этот пользователь связан с мастером. При удалении пользователя мастер также будет удален. Продолжить?"))
+                return;
+        }
+        else
+        {
+            if (!await JS.InvokeAsync<bool>("confirm", $"Вы уверены, что хотите удалить пользователя '{user.Login}'?"))
+                return;
+        }
+
+        try
+        {
+            var userToDelete = await Context.Users.FindAsync(id);
+            if (userToDelete != null)
+            {
+                await UserService.DeleteUserAsync(userToDelete);
+                Context.Users.Remove(userToDelete);
+                await Context.SaveChangesAsync();
+
+                await LoadUsers();
+
+                await JS.InvokeVoidAsync("alert", "Пользователь успешно удален");
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            await JS.InvokeVoidAsync("alert", ex.Message);
+        }
+        catch (DbUpdateException ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Ошибка удаления: {ex.InnerException?.Message ?? ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Ошибка: {ex.Message}");
+        }
+    }
+
+    private void CloseCreateModal()
+    {
+        showCreateModal = false;
+        ResetCreateForm();
+        StateHasChanged();
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+        ResetEditForm();
+        StateHasChanged();
+    }
+
+    private void ClosePasswordModal()
+    {
+        showPasswordModal = false;
+        StateHasChanged();
+    }
+}
