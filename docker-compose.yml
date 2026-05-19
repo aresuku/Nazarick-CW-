@@ -2,8 +2,8 @@
 
 services:
   webapp:
-    image: aresuku/nazaric:latest
-    container_name: nazaric
+    image: aresuku/nazarick:latest
+    container_name: nazarick
     build:
       context: .
       dockerfile: Dockerfile
@@ -28,12 +28,14 @@ services:
       - ./Shared:/app/Shared
       - ./wwwroot:/app/wwwroot
       - ./appsettings.json:/app/appsettings.json:ro
+    networks:
+        -nazarick_net:    
     env_file:
       - .env
 
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: Nazaric-sqlserver
+    container_name: nazarick-sqlserver
     restart: unless-stopped
     environment:
       - ACCEPT_EULA=Y
@@ -49,6 +51,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-
+    networks:
+      -nazarick_net:
+networks:
+  -nazarick_net:
+    driver: bridge
 volumes:
   sqlserver_data:
