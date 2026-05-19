@@ -1,4 +1,5 @@
 ﻿@page "/receptions"
+<MasterAuth />
 @using HairSalon.Models
 @using HairSalon.DTOs
 @using Microsoft.EntityFrameworkCore
@@ -129,13 +130,12 @@
     </div>
 </div>
 
-<!-- Модальное окно создания/редактирования записи -->
 <div class="modal fade @(showModal ? "show d-block" : "")" id="receptionModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" @onclick:stopPropagation>
             <div class="modal-header">
                 <h5 class="modal-title">@(isEditMode ? "Редактирование записи" : "Новая запись")</h5>
-                <button type="button" class="btn-close" @onclick="CloseModal" aria-label="Close"></button>
+                <button type="button" class="btn-close" @onclick="CloseModal"></button>
             </div>
             <div class="modal-body">
                 @if (!string.IsNullOrEmpty(errorMessage))
@@ -247,7 +247,6 @@
     private bool isLoading = false;
     private string errorMessage = string.Empty;
 
-    // Валидация
     private bool masterError = false;
     private bool serviceError = false;
     private bool timeError = false;
@@ -269,9 +268,7 @@
     {
         try
         {
-            var mastersFromDb = await Context.Masters
-                .Include(m => m.User)
-                .ToListAsync();
+            var mastersFromDb = await Context.Masters.Include(m => m.User).ToListAsync();
             _masters = (await MasterService.GetFormattedMastersForAdminAsync(mastersFromDb)).ToList();
         }
         catch (Exception ex)
@@ -433,14 +430,12 @@
             timeError = false;
         }
 
-        // Проверка времени
         if (_selectedTime != default && _selectedTime < DateTime.Now)
         {
             errorMessage = "Нельзя записаться на прошедшее время";
             isValid = false;
         }
 
-        // Проверка рабочего времени
         if (_selectedTime != default)
         {
             var hour = _selectedTime.Hour;
@@ -457,7 +452,6 @@
             }
         }
 
-        // Проверка занятости мастера
         if (isValid && _selectedMasterId > 0 && _selectedTime != default)
         {
             if (IsMasterBusy(_selectedMasterId, _selectedTime))
@@ -486,7 +480,6 @@
         {
             if (isEditMode)
             {
-                // Обновление записи
                 var reception = await Context.Receptions
                     .Include(r => r.Master)
                     .Include(r => r.Service)
@@ -514,10 +507,8 @@
             }
             else
             {
-                // Создание новой записи
                 if (_selectedClientId > 0 && _selectedClientId != 0)
                 {
-                    // Запись от мастера для клиента
                     var createDto = new CreateReceptionByMasterDto
                     {
                         Time = _selectedTime,
@@ -533,7 +524,6 @@
                 }
                 else
                 {
-                    // Обычная запись (как от клиента)
                     var createDto = new CreateReceptionDto
                     {
                         Time = _selectedTime,
@@ -589,7 +579,6 @@
 
             if (reception != null)
             {
-                // Проверка, можно ли удалить запись
                 if (reception.Time < DateTime.Now)
                 {
                     await JS.InvokeVoidAsync("alert", "Нельзя удалить прошедшую запись");

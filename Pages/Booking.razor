@@ -1,0 +1,363 @@
+﻿@page "/booking"
+@using HairSalon.DTOs
+@using Microsoft.EntityFrameworkCore
+@inject HairSalon.Data.HairSalonContext Context
+@inject IMasterService MasterService
+@inject IServiceService ServiceService
+@inject IReceptionService ReceptionService
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <!-- Заголовок -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="mb-0">
+                    <i class="fas fa-calendar-plus text-primary me-2"></i>Запись к мастеру
+                </h1>
+                <button class="btn btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/")'>
+                    <i class="fas fa-arrow-left me-1"></i>На главную
+                </button>
+            </div>
+
+            @if (!_isAuthenticated)
+            {
+                <div class="card shadow-sm border-0 rounded-4 text-center p-5" style="background-color: #151922;">
+                    <i class="fas fa-lock fa-4x text-warning mb-3"></i>
+                    <h3 class="text-white mb-3">Требуется авторизация</h3>
+                    <p class="text-white-50 mb-4">Пожалуйста, войдите в аккаунт для записи к мастеру</p>
+                    <div>
+                        <button class="btn btn-primary me-2" @onclick="ShowLogin">
+                            <i class="fas fa-sign-in-alt me-1"></i>Войти
+                        </button>
+                        <button class="btn btn-outline-primary" @onclick="ShowRegister">
+                            <i class="fas fa-user-plus me-1"></i>Регистрация
+                        </button>
+                    </div>
+                </div>
+            }
+            else if (_isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Загрузка...</span>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="card shadow-sm border-0 rounded-4" style="background-color: #151922;">
+                    <div class="card-body p-4">
+                        <!-- Выбор услуги -->
+                        <div class="mb-4">
+                            <label class="form-label text-white-50 small mb-2">
+                                <i class="fas fa-cut me-1 text-primary"></i>Выберите услугу
+                            </label>
+                            <select class="form-select" @bind="selectedServiceId" @bind:after="OnServiceSelected">
+                                <option value="0">-- Выберите услугу --</option>
+                                @foreach (var service in _services)
+                                {
+                                    <option value="@service.Id">
+                                        @service.Name - @service.Price.ToString("N0") ₽
+                                    </option>
+                                }
+                            </select>
+                        </div>
+
+                        <!-- Выбор мастера -->
+                        <div class="mb-4">
+                            <label class="form-label text-white-50 small mb-2">
+                                <i class="fas fa-user me-1 text-primary"></i>Выберите мастера
+                            </label>
+                            <select class="form-select" @bind="selectedMasterId" @bind:after="OnMasterSelected">
+                                <option value="0">-- Выберите мастера --</option>
+                                @foreach (var master in _filteredMasters)
+                                {
+                                    <option value="@master.Id">
+                                        @master.FirstName @master.LastName - @master.Experience
+                                    </option>
+                                }
+                            </select>
+                        </div>
+
+                        <!-- Выбор даты и времени -->
+                        <div class="mb-4">
+                            <label class="form-label text-white-50 small mb-2">
+                                <i class="fas fa-calendar-day me-1 text-primary"></i>Выберите дату и время
+                            </label>
+                            <input type="datetime-local" class="form-control" @bind="selectedTime"
+                                   min="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" />
+                            <small class="text-white-50 d-block mt-1">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Рабочие часы: 10:00 - 20:00 (интервал 30 минут)
+                            </small>
+                        </div>
+
+                        <!-- Информация о выбранном -->
+                        @if (selectedServiceId > 0 && selectedMasterId > 0 && selectedTime > DateTime.Now)
+                        {
+                            <div class="alert alert-info bg-primary bg-opacity-10 border-0">
+                                
+                                <i class="fas fa-info-circle me-2 text-white-50"></i>
+                                <span class="text-white-50"><strong>Информация о записи:</strong><br /></span>                                
+                                <i class="fas fa-cut me-1 text-white-50"></i> <span class="text-white-50">Услуга: @_selectedServiceName<br /></span>
+                                <i class="fas fa-user me-1 text-white-50"></i> <span class="text-white-50">Мастер: @_selectedMasterName<br /></span>
+                                <i class="fas fa-calendar me-1 text-white-50"></i> <span class="text-white-50">Дата и время: @selectedTime.ToString("dd.MM.yyyy HH:mm")</span>
+                            </div>
+                        }
+
+                        <!-- Кнопка записи -->
+                        <div class="d-grid gap-2 mt-4">
+                            <button class="btn btn-primary btn-lg" @onclick="CreateBooking"
+                                    disabled="@(!CanBook)">
+                                @if (_isBooking)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                <i class="fas fa-check-circle me-2"></i>
+                                @(_isBooking ? "Запись..." : "Записаться")
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-select, .form-control {
+        background-color: #1a1f2a !important;
+        color: #e0e0e0 !important;
+        border: 1px solid #2a2f3a !important;
+        border-radius: 8px !important;
+        padding: 10px 12px !important;
+    }
+
+        .form-select:focus, .form-control:focus {
+            border-color: #667eea !important;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25) !important;
+            outline: none !important;
+        }
+
+        .form-select option {
+            background-color: #1a1f2a;
+            color: #e0e0e0;
+        }
+
+    .bg-opacity-10 {
+        background-color: rgba(102, 126, 234, 0.1) !important;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        transition: all 0.3s ease;
+    }
+
+        .btn-primary:hover:not(:disabled) {
+            background: linear-gradient(135deg, #5a67d8 0%, #6b46a0 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+    .btn-outline-secondary {
+        border-color: #2a2f3a;
+        color: #e0e0e0;
+    }
+
+        .btn-outline-secondary:hover {
+            background-color: #2a2f3a;
+            border-color: #667eea;
+            color: white;
+        }
+
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+        filter: invert(1);
+        cursor: pointer;
+    }
+
+    .text-white-50 {
+        color: rgba(255, 255, 255, 0.5) !important;
+    }
+
+    .card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2) !important;
+        }
+</style>
+
+@code {
+    private List<ServiceDto> _services = new();
+    private List<MasterDto> _masters = new();
+    private List<MasterDto> _filteredMasters = new();
+
+    private int selectedServiceId = 0;
+    private int selectedMasterId = 0;
+    private DateTime selectedTime = DateTime.Now.AddDays(1).AddHours(10);
+
+    private string _selectedServiceName = string.Empty;
+    private string _selectedMasterName = string.Empty;
+
+    private bool _isAuthenticated = false;
+    private bool _isLoading = true;
+    private bool _isBooking = false;
+    private int _currentUserId = 0;
+
+    private bool CanBook => selectedServiceId > 0 && selectedMasterId > 0 && selectedTime > DateTime.Now && !_isBooking;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _isLoading = true;
+
+            // Проверка авторизации
+            var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+            if (!string.IsNullOrEmpty(userIdStr))
+            {
+                _currentUserId = int.Parse(userIdStr);
+                _isAuthenticated = true;
+            }
+
+            if (_isAuthenticated)
+            {
+                // Загрузка услуг
+                var servicesFromDb = await Context.Services.ToListAsync();
+                _services = (await ServiceService.GetFormattedServicesForAdminAsync(servicesFromDb)).ToList();
+
+                // Загрузка мастеров
+                var mastersFromDb = await Context.Masters.Include(m => m.User).ToListAsync();
+                _masters = (await MasterService.GetFormattedMastersAsync(mastersFromDb)).ToList();
+                _filteredMasters = _masters.ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки: {ex.Message}");
+            await JS.InvokeVoidAsync("alert", "Ошибка загрузки данных");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnServiceSelected()
+    {
+        var service = _services.FirstOrDefault(s => s.Id == selectedServiceId);
+        _selectedServiceName = service?.Name ?? string.Empty;
+
+        // Сброс выбора мастера при смене услуги
+        selectedMasterId = 0;
+        _filteredMasters = _masters.ToList();
+        StateHasChanged();
+    }
+
+    private void OnMasterSelected()
+    {
+        var master = _masters.FirstOrDefault(m => m.Id == selectedMasterId);
+        _selectedMasterName = master != null ? $"{master.FirstName} {master.LastName}" : string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task CreateBooking()
+    {
+        if (!CanBook) return;
+
+        // Проверка времени
+        var hour = selectedTime.Hour;
+        if (hour < 10 || hour >= 20)
+        {
+            await JS.InvokeVoidAsync("alert", "Запись возможна только с 10:00 до 20:00");
+            return;
+        }
+
+        if (selectedTime.Minute % 30 != 0)
+        {
+            await JS.InvokeVoidAsync("alert", "Запись возможна с интервалом 30 минут");
+            return;
+        }
+
+        _isBooking = true;
+        StateHasChanged();
+
+        try
+        {
+            // Проверка, не занято ли время
+            var existingReception = await Context.Receptions
+                .AnyAsync(r => r.MasterId == selectedMasterId && r.Time == selectedTime);
+
+            if (existingReception)
+            {
+                await JS.InvokeVoidAsync("alert", "Это время уже занято. Пожалуйста, выберите другое.");
+                return;
+            }
+
+            // Создание записи через сервис
+            var createDto = new CreateReceptionDto
+            {
+                Time = selectedTime,
+                MasterId = selectedMasterId,
+                ServiceId = selectedServiceId
+            };
+
+            var newReception = await ReceptionService.CreateReceptionAsync(createDto, _currentUserId);
+
+            Context.Receptions.Add(newReception);
+            await Context.SaveChangesAsync();
+
+            await JS.InvokeVoidAsync("alert", $"✅ Вы успешно записаны!\n\nДата: {selectedTime:dd.MM.yyyy HH:mm}\nУслуга: {_selectedServiceName}\nМастер: {_selectedMasterName}");
+
+            // Сброс формы
+            selectedServiceId = 0;
+            selectedMasterId = 0;
+            selectedTime = DateTime.Now.AddDays(1).AddHours(10);
+            _selectedServiceName = string.Empty;
+            _selectedMasterName = string.Empty;
+
+            StateHasChanged();
+
+            // Предложение перейти к записям
+            if (await JS.InvokeAsync<bool>("confirm", "Перейти к моим записям?"))
+            {
+                Navigation.NavigateTo("/my-receptions");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Ошибка при записи: {ex.Message}");
+        }
+        finally
+        {
+            _isBooking = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowLogin()
+    {
+        Navigation.NavigateTo("/", true);
+    }
+
+    private void ShowRegister()
+    {
+        Navigation.NavigateTo("/", true);
+    }
+}

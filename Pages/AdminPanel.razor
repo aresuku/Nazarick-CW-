@@ -1,0 +1,230 @@
+﻿@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<div class="admin-panel-container">
+    <button class="admin-toggle-btn" @onclick="ToggleAdminPanel" title="Админ-панель">
+        <i class="fas fa-cog"></i>
+    </button>
+
+    @if (showAdminPanel)
+    {
+    <div class="admin-panel-overlay" @onclick="CloseAdminPanel"></div>
+    <div class="admin-panel">
+        <div class="admin-panel-header">
+            <h5 class="mb-0">
+                <i class="fas fa-shield-alt me-2"></i>Панель управления
+            </h5>
+            <button class="btn-close btn-close-white" @onclick="CloseAdminPanel"></button>
+        </div>
+        <div class="admin-panel-body">
+            <div class="admin-menu-item" @onclick='() => NavigateTo("/masters")'>
+                <i class="fas fa-users me-3 text-primary"></i>
+                <div>
+                    <div class="fw-bold">Управление мастерами</div>
+                        <small class="text-white">Добавление, редактирование, удаление мастеров</small>
+                </div>
+            </div>
+            <div class="admin-menu-item" @onclick='() => NavigateTo("/services")'>
+                <i class="fas fa-cut me-3 text-primary"></i>
+                <div>
+                    <div class="fw-bold">Управление услугами</div>
+                        <small class="text-white">Управление услугами и ценами</small>
+                </div>
+            </div>
+            <div class="admin-menu-item" @onclick='() => NavigateTo("/receptions")'>
+                <i class="fas fa-calendar-check me-3 text-primary"></i>
+                <div>
+                    <div class="fw-bold">Управление записями</div>
+                        <small class="text-white">Просмотр и управление всеми записями</small>
+                </div>
+            </div>
+            <div class="admin-menu-item" @onclick='() => NavigateTo("/users")'>
+                <i class="fas fa-user-shield me-3 text-primary"></i>
+                <div>
+                    <div class="fw-bold">Управление пользователями</div>
+                        <small class="text-white">Управление учетными записями</small>
+                </div>
+            </div>
+        </div>
+        <div class="admin-panel-footer">
+            <button class="btn btn-sm btn-outline-danger w-100" @onclick="Logout">
+                <i class="fas fa-sign-out-alt me-2"></i>Выйти из аккаунта
+            </button>
+        </div>
+    </div>
+    }
+</div>
+
+<style>
+    .admin-panel-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+    }
+
+    .admin-toggle-btn {
+        width: 55px;
+        height: 55px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        color: white;
+        font-size: 1.5rem;
+        cursor: pointer;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .admin-toggle-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+
+    .admin-panel-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1001;
+    }
+
+    .admin-panel {
+        position: fixed;
+        bottom: 90px;
+        right: 20px;
+        width: 350px;
+        background: linear-gradient(135deg, #1a1f2a 0%, #0d1117 100%);
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        z-index: 1002;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        animation: slideIn 0.3s ease;
+    }
+
+    @@keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .admin-panel-header {
+        padding: 15px 20px;
+        background: rgba(255, 255, 255, 0.05);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px 12px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: white;
+    }
+
+    .admin-panel-body {
+        padding: 10px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .admin-menu-item {
+        display: flex;
+        align-items: center;
+        padding: 12px 15px;
+        margin: 5px 0;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+        .admin-menu-item:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transform: translateX(5px);
+        }
+
+            .admin-menu-item:hover .text-muted,
+            .admin-menu-item:hover .fw-bold {
+                color: white !important;
+            }
+
+            .admin-menu-item:hover i {
+                color: white !important;
+            }
+
+    .admin-panel-footer {
+        padding: 15px 20px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-outline-danger {
+        border-color: #dc3545;
+        color: #dc3545;
+    }
+
+        .btn-outline-danger:hover {
+            background-color: #dc3545;
+            color: white;
+        }
+</style>
+
+@code {
+    private bool showAdminPanel = false;
+    private string _currentUserRole = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserRole();
+    }
+
+    private async Task LoadUserRole()
+    {
+        try
+        {
+            _currentUserRole = await JS.InvokeAsync<string>
+    ("localStorage.getItem", "userRole");
+    }
+    catch (Exception ex)
+    {
+    Console.WriteLine($"Ошибка загрузки роли: {ex.Message}");
+    }
+    StateHasChanged();
+    }
+
+    private void ToggleAdminPanel()
+    {
+    showAdminPanel = !showAdminPanel;
+    StateHasChanged();
+    }
+
+    private void CloseAdminPanel()
+    {
+    showAdminPanel = false;
+    StateHasChanged();
+    }
+
+    private void NavigateTo(string url)
+    {
+    CloseAdminPanel();
+    Navigation.NavigateTo(url);
+    }
+
+    private async Task Logout()
+    {
+    await JS.InvokeVoidAsync("localStorage.removeItem", "currentUser");
+    await JS.InvokeVoidAsync("localStorage.removeItem", "userRole");
+    await JS.InvokeVoidAsync("localStorage.removeItem", "userId");
+
+    CloseAdminPanel();
+    Navigation.NavigateTo("/", true);
+    }
+    }

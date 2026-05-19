@@ -1,0 +1,15 @@
+﻿@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var userRole = await JS.InvokeAsync<string>("localStorage.getItem", "userRole");
+
+        if (userRole != "Master" && userRole != "Admin")
+        {
+            // Если не мастер или админ - перенаправляем на главную
+            Navigation.NavigateTo("/", true);
+        }
+    }
+}

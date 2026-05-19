@@ -1,17 +1,29 @@
-﻿using Microsoft.EntityFrameworkCore;
-using HairSalon.Models;
+﻿using HairSalon.Models;
+using HairSalon.Services;
+using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
 namespace HairSalon.Data
 {
     public static class DbSeeder
     {
+        static string HashPassword(string password)
+        {
+            using var sha256 = SHA256.Create();
+            var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
+            return Convert.ToBase64String(hash);
+            
+        }
         public static void Seed(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<User>().HasData(
-                new User { UserId = 1, Login = "Satoru", PasswordHash = "hash1", Username = "Momonga", Email = "YGGDRASIL@gmail.com", Role = "Master", IsActive = true },
-                new User { UserId = 2, Login = "Sorcerer King", PasswordHash = "hash2", Username = "Ainz Ooal Gown", Email = "Overlord@gmail.com", Role = "Admin", IsActive = true },
-                new User { UserId = 3, Login = "Tanya", PasswordHash = "hash3", Username = "Gun", Email = "Degurechaff@gmail.com", Role = "Master", IsActive = true },
-                new User { UserId = 4, Login = "albedo", PasswordHash = "hash4", Username = "LvAnz", Email = "albedo@gmail.com", Role = "User", IsActive = true },
-                new User { UserId = 5, Login = "Garuganchua", PasswordHash = "hash5", Username = "Garuganchua", Email = "Garuganchua@gmail.com", Role = "User", IsActive = true }
+                new User { UserId = 1, Login = "Overlord", PasswordHash = HashPassword("Ainz"), Username = "Overlord", Email = "Overlord@Nazaric.com", Role = "Admin", IsActive = true },          
+                new User { UserId = 2, Login = "Satoru", PasswordHash = HashPassword("hash1"), Username = "Momonga", Email = "YGGDRASIL@gmail.com", Role = "Master", IsActive = true },
+                new User { UserId = 3, Login = "Entoma", PasswordHash = HashPassword("hash2"), Username = "Энтома Василиса Дзета", Email = "maid@gmail.com", Role = "Master", IsActive = true },
+                new User { UserId = 4, Login = "Tanya", PasswordHash = HashPassword("hash3"), Username = "Таня фон Дегуречафф", Email = "Degurechaff@gmail.com", Role = "Master", IsActive = true },
+                new User { UserId = 5, Login = "albedo", PasswordHash = HashPassword("hash4"), Username = "LvAnz", Email = "albedo@gmail.com", Role = "User", IsActive = true },
+                new User { UserId = 6, Login = "Garuganchua", PasswordHash = HashPassword("hash5"), Username = "Garuganchua", Email = "Garuganchua@gmail.com", Role = "User", IsActive = true }                
             );            
             modelBuilder.Entity<Master>().HasData(
                 new Master { MasterId = 1, UserId = 1, FirstName = "Сатору", LastName = "Судзуки", Experience = "100 Лет", Gender = "М", Description = "по умолчанию 1", Email = "YGGDRASIL@gmail.com", Role = "Master" },                

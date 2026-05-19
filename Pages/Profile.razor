@@ -1,0 +1,479 @@
+﻿@page "/profile"
+@using HairSalon.DTOs
+@using Microsoft.EntityFrameworkCore
+@inject HairSalon.Data.HairSalonContext Context
+@inject IUserService UserService
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="mb-0">
+                    <i class="fas fa-user-circle text-primary me-2"></i>Мой профиль
+                </h1>
+                <button class="btn btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/")'>
+                    <i class="fas fa-arrow-left me-1"></i>На главную
+                </button>
+            </div>
+
+            @if (_isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Загрузка...</span>
+                    </div>
+                </div>
+            }
+            else if (_user == null)
+            {
+                <div class="alert alert-warning text-center">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Пользователь не найден. Пожалуйста, войдите в аккаунт.
+                    <div class="mt-3">
+                        <a href="/" class="btn btn-primary">Перейти на главную</a>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="card shadow-sm border-0 rounded-4 mb-4" style="background-color: #151922;">
+                    <div class="card-header bg-transparent border-0 pt-4">
+                        <h5 class="mb-0">
+                            <i class="fas fa-info-circle text-primary me-2"></i>
+                            <span class="text-white">Личная информация</span>
+                        </h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-white-50 small">Логин</label>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-user me-2 text-white-50"></i>
+                                    <span class="fw-bold text-white">@_user.Login</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-white-50 small">Роль</label>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-tag me-2 text-white-50"></i>
+                                    @if (_user.Role == "Admin")
+                                    {
+                                        <span class="badge bg-danger">Администратор</span>
+                                    }
+                                    else if (_user.Role == "Master")
+                                    {
+                                        <span class="badge bg-primary">Мастер</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Пользователь</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-white-50 small">Имя пользователя</label>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-id-card me-2 text-white-50"></i>
+                                    <span class="text-white">@_user.Username</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-white-50 small">Email</label>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-envelope me-2 text-white-50"></i>
+                                    <span class="text-white">@_user.Email</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-white-50 small">Статус</label>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-circle me-2 @(_user.IsActive ? "text-success" : "text-danger")"></i>
+                                    <span class="@(_user.IsActive ? "text-success" : "text-danger")">
+                                        @(_user.IsActive ? "Активен" : "Заблокирован")
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label text-white-50 small">ID пользователя</label>
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-hashtag me-2 text-white-50"></i>
+                                    <span class="text-white">@_user.Id</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-0 rounded-4 mb-4" style="background-color: #151922;">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-1 text-white">
+                                    <i class="fas fa-key text-primary me-2"></i>Безопасность
+                                </h5>
+                                <p class="text-white-50 small mb-0">Регулярно меняйте пароль для безопасности аккаунта</p>
+                            </div>
+                            <button class="btn btn-outline-primary" @onclick="ShowChangePasswordModal">
+                                <i class="fas fa-lock me-1"></i>Сменить пароль
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                @if (_user.Role == "Master" && _masterInfo != null)
+                {
+                    <div class="card shadow-sm border-0 rounded-4" style="background-color: #151922;">
+                        <div class="card-header bg-transparent border-0 pt-4">
+                            <h5 class="mb-0 text-white">
+                                <i class="fas fa-briefcase text-primary me-2"></i>Информация о мастере
+                            </h5>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label text-white-50 small">Имя</label>
+                                    <p class="fw-bold mb-0 text-white">@_masterInfo.FirstName</p>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label text-white-50 small">Фамилия</label>
+                                    <p class="fw-bold mb-0 text-white">@_masterInfo.LastName</p>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label text-white-50 small">Опыт</label>
+                                    <p class="mb-0 text-white">@_masterInfo.Experience</p>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label text-white-50 small">Пол</label>
+                                    <p class="mb-0 text-white">@(_masterInfo.Gender == "М" ? "Мужской" : "Женский")</p>
+                                </div>
+                                <div class="col-12 mb-3">
+                                    <label class="form-label text-white-50 small">Описание</label>
+                                    <p class="mb-0 text-white">@(_masterInfo.Description ?? "Нет описания")</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+<div class="modal fade @(showPasswordModal ? "show d-block" : "")" id="changePasswordModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title">
+                    <i class="fas fa-key text-primary me-2"></i>Смена пароля
+                </h5>
+                <button type="button" class="btn-close" @onclick="ClosePasswordModal"></button>
+            </div>
+            <div class="modal-body p-4">
+                @if (!string.IsNullOrEmpty(passwordErrorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="fas fa-exclamation-circle me-2"></i> @passwordErrorMessage
+                        <button type="button" class="btn-close" @onclick="() => passwordErrorMessage = null"></button>
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Текущий пароль <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light">
+                            <i class="fas fa-lock text-muted"></i>
+                        </span>
+                        <input type="@(showCurrentPassword ? "text" : "password")" 
+                               class="form-control @(currentPasswordError ? "is-invalid" : "")" 
+                               @bind="_currentPassword" @bind:event="oninput"
+                               placeholder="Введите текущий пароль" />
+                        <button class="btn btn-outline-secondary" type="button" @onclick="() => showCurrentPassword = !showCurrentPassword">
+                            <i class="fas @(showCurrentPassword ? "fa-eye-slash" : "fa-eye")"></i>
+                        </button>
+                    </div>
+                    @if (currentPasswordError)
+                    {
+                        <div class="invalid-feedback d-block">Введите текущий пароль</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Новый пароль <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light">
+                            <i class="fas fa-key text-muted"></i>
+                        </span>
+                        <input type="@(showNewPassword ? "text" : "password")" 
+                               class="form-control @(newPasswordError ? "is-invalid" : "")" 
+                               @bind="_newPassword" @bind:event="oninput"
+                               placeholder="Минимум 6 символов" />
+                        <button class="btn btn-outline-secondary" type="button" @onclick="() => showNewPassword = !showNewPassword">
+                            <i class="fas @(showNewPassword ? "fa-eye-slash" : "fa-eye")"></i>
+                        </button>
+                    </div>
+                    @if (newPasswordError)
+                    {
+                        <div class="invalid-feedback d-block">Новый пароль должен быть не менее 6 символов</div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Подтверждение пароля <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light">
+                            <i class="fas fa-check text-muted"></i>
+                        </span>
+                        <input type="@(showConfirmPassword ? "text" : "password")" 
+                               class="form-control @(confirmPasswordError ? "is-invalid" : "")" 
+                               @bind="_confirmPassword" @bind:event="oninput"
+                               placeholder="Повторите новый пароль" />
+                        <button class="btn btn-outline-secondary" type="button" @onclick="() => showConfirmPassword = !showConfirmPassword">
+                            <i class="fas @(showConfirmPassword ? "fa-eye-slash" : "fa-eye")"></i>
+                        </button>
+                    </div>
+                    @if (confirmPasswordError)
+                    {
+                        <div class="invalid-feedback d-block">Пароли не совпадают</div>
+                    }
+                </div>
+
+                <div class="alert alert-info small">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Пароль должен содержать не менее 6 символов
+                </div>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-secondary" @onclick="ClosePasswordModal">Отмена</button>
+                <button type="button" class="btn btn-primary" @onclick="ChangePassword" @disabled="isChangingPassword">
+                    @if (isChangingPassword)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    <i class="fas fa-save me-1"></i>Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.1) !important;
+    }
+    
+    .form-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .badge {
+        padding: 5px 10px;
+        font-size: 0.75rem;
+    }
+</style>
+
+@code {
+    private AdminUserDto? _user = null;
+    private MasterDto? _masterInfo = null;
+    private bool _isLoading = true;
+    
+    private bool showPasswordModal = false;
+    private bool isChangingPassword = false;
+    private string passwordErrorMessage = string.Empty;
+    private string _currentPassword = string.Empty;
+    private string _newPassword = string.Empty;
+    private string _confirmPassword = string.Empty;
+    
+    private bool showCurrentPassword = false;
+    private bool showNewPassword = false;
+    private bool showConfirmPassword = false;
+    
+    private bool currentPasswordError = false;
+    private bool newPasswordError = false;
+    private bool confirmPasswordError = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserProfile();
+    }
+
+    private async Task LoadUserProfile()
+    {
+        try
+        {
+            _isLoading = true;
+            
+            var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+            
+            if (string.IsNullOrEmpty(userIdStr))
+            {
+                _user = null;
+                return;
+            }
+            
+            var userId = int.Parse(userIdStr);
+            var user = await Context.Users.FindAsync(userId);
+            
+            if (user == null)
+            {
+                _user = null;
+                return;
+            }
+            
+            _user = new AdminUserDto
+            {
+                Id = user.UserId,
+                Login = user.Login,
+                Username = user.Username,
+                Email = user.Email,
+                Role = user.Role,
+                IsActive = user.IsActive,
+                DisplayInfo = $"{user.UserId}|{user.Login} [{user.Role}]"
+            };
+            
+            if (user.Role == "Master")
+            {
+                var master = await Context.Masters.FirstOrDefaultAsync(m => m.UserId == userId);
+                if (master != null)
+                {
+                    _masterInfo = new MasterDto
+                    {
+                        Id = master.MasterId,
+                        FirstName = master.FirstName,
+                        LastName = master.LastName,
+                        Experience = master.Experience,
+                        Gender = master.Gender,
+                        Description = master.Description,
+                        Role = master.Role
+                    };
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки профиля: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowChangePasswordModal()
+    {
+        _currentPassword = string.Empty;
+        _newPassword = string.Empty;
+        _confirmPassword = string.Empty;
+        passwordErrorMessage = string.Empty;
+        currentPasswordError = false;
+        newPasswordError = false;
+        confirmPasswordError = false;
+        showPasswordModal = true;
+        StateHasChanged();
+    }
+
+    private void ClosePasswordModal()
+    {
+        showPasswordModal = false;
+        StateHasChanged();
+    }
+
+    private bool ValidatePasswordForm()
+    {
+        bool isValid = true;
+
+        if (string.IsNullOrWhiteSpace(_currentPassword))
+        {
+            currentPasswordError = true;
+            isValid = false;
+        }
+        else
+        {
+            currentPasswordError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newPassword) || _newPassword.Length < 6)
+        {
+            newPasswordError = true;
+            isValid = false;
+        }
+        else
+        {
+            newPasswordError = false;
+        }
+
+        if (_newPassword != _confirmPassword)
+        {
+            confirmPasswordError = true;
+            isValid = false;
+        }
+        else
+        {
+            confirmPasswordError = false;
+        }
+
+        return isValid;
+    }
+
+    private async Task ChangePassword()
+    {
+        if (!ValidatePasswordForm())
+        {
+            StateHasChanged();
+            return;
+        }
+
+        isChangingPassword = true;
+        passwordErrorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+            if (string.IsNullOrEmpty(userIdStr))
+            {
+                passwordErrorMessage = "Пользователь не авторизован";
+                return;
+            }
+
+            var userId = int.Parse(userIdStr);
+            var user = await Context.Users.FindAsync(userId);
+
+            if (user == null)
+            {
+                passwordErrorMessage = "Пользователь не найден";
+                return;
+            }
+
+            if (!UserService.VerifyPassword(_currentPassword, user.PasswordHash))
+            {
+                passwordErrorMessage = "Текущий пароль указан неверно";
+                return;
+            }
+
+            user.PasswordHash = UserService.HashPassword(_newPassword);
+            await Context.SaveChangesAsync();
+
+            ClosePasswordModal();
+            await JS.InvokeVoidAsync("alert", "Пароль успешно изменен!");
+        }
+        catch (Exception ex)
+        {
+            passwordErrorMessage = $"Ошибка: {ex.Message}";
+        }
+        finally
+        {
+            isChangingPassword = false;
+            StateHasChanged();
+        }
+    }
+}

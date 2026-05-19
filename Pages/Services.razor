@@ -1,4 +1,5 @@
 ﻿@page "/services"
+<MasterAuth />
 @using HairSalon.Models
 @using HairSalon.DTOs
 @using Microsoft.EntityFrameworkCore
@@ -19,7 +20,7 @@
             </button>
         </div>
         <div class="d-flex gap-2">
-            <input type="text" class="form-control" placeholder="Поиск..." style="width: 200px;" @bind="searchText" @oninput="FilterServices" />
+            <input type="text" class="form-control" placeholder="Поиск..." style="width: 200px;" @bind="searchText" @bind:event="oninput" />
         </div>
     </div>
     <div class="card-body">
@@ -43,7 +44,7 @@
                 @foreach (var service in _displayServices)
                 {
                     <div class="col-md-4 mb-3">
-                        <div class="card h-100 shadow-sm border-0 rounded-4 bg-white">
+                        <div class="card h-100 shadow-sm border-0 rounded-4" style="background-color: #ffffff;">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <h5 class="card-title mb-0">@service.Name</h5>
@@ -77,7 +78,6 @@
     </div>
 </div>
 
-<!-- Модальное окно создания услуги -->
 <div class="modal fade @(showModal ? "show d-block" : "")" id="serviceModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" @onclick:stopPropagation>
@@ -157,7 +157,6 @@
     private decimal _newServicePrice = 0;
     private string _newServiceDescription = string.Empty;
 
-    // Валидация
     private bool nameError = false;
     private bool priceError = false;
 
@@ -300,7 +299,7 @@
 
     private async Task DeleteService(int id)
     {
-        if (!await JS.InvokeAsync<bool>("confirm", $"Вы уверены, что хотите удалить услугу?{(id <= 3 ? " (Внимание: это демо-услуга)" : "")}"))
+        if (!await JS.InvokeAsync<bool>("confirm", $"Вы уверены, что хотите удалить услугу?"))
             return;
 
         try

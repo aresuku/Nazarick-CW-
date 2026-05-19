@@ -1,4 +1,5 @@
 ﻿@page "/users"
+<AdminAuth />
 @using HairSalon.Models
 @using HairSalon.DTOs
 @using Microsoft.EntityFrameworkCore
@@ -107,7 +108,9 @@
                                         <button class="btn btn-outline-primary" @onclick="() => ShowEditModal(user)">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button class="btn btn-outline-danger" @onclick="() => DeleteUser(user.Id)" disabled="@(user.Role == "Admin" && _users.Count(u => u.Role == "Admin") == 1)">
+                                        <button class="btn btn-outline-danger"
+                                                @onclick="() => DeleteUser(user.Id)"
+                                                disabled="@(user.Role == "Admin" && _users.Count(u => u.Role == "Admin") == 1)">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </div>
@@ -121,15 +124,14 @@
     </div>
 </div>
 
-<!-- Модальное окно создания пользователя -->
 <div class="modal fade @(showCreateModal ? "show d-block" : "")" id="createUserModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" @onclick:stopPropagation>
-            <div class="modal-header">
+            <div class="modal-header border-0 pb-0">
                 <h5 class="modal-title">Добавить нового пользователя</h5>
-                <button type="button" class="btn-close" @onclick="CloseCreateModal" aria-label="Close"></button>
+                <button type="button" class="btn-close" @onclick="CloseCreateModal"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body p-4">
                 @if (!string.IsNullOrEmpty(createErrorMessage))
                 {
                     <div class="alert alert-danger alert-dismissible fade show">
@@ -140,45 +142,65 @@
 
                 <div class="mb-3">
                     <label class="form-label">Логин <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control @(loginError ? "is-invalid" : "")"
-                           @bind="_newUser.Login" @bind:event="oninput"
-                           placeholder="Введите логин" />
+                    <div class="input-group">
+                        <span class="input-group-text bg-light">
+                            <i class="fas fa-user text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control @(loginError ? "is-invalid" : "")"
+                               @bind="_newUser.Login" @bind:event="oninput"
+                               placeholder="Введите логин" />
+                    </div>
                     @if (loginError)
                     {
-                        <div class="invalid-feedback">Логин обязателен для заполнения</div>
+                        <div class="invalid-feedback d-block">Логин обязателен для заполнения</div>
                     }
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">Пароль <span class="text-danger">*</span></label>
-                    <input type="password" class="form-control @(passwordError ? "is-invalid" : "")"
-                           @bind="_newUser.Password" @bind:event="oninput"
-                           placeholder="Минимум 6 символов" />
+                    <div class="input-group">
+                        <span class="input-group-text bg-light">
+                            <i class="fas fa-lock text-muted"></i>
+                        </span>
+                        <input type="password" class="form-control @(passwordError ? "is-invalid" : "")"
+                               @bind="_newUser.Password" @bind:event="oninput"
+                               placeholder="Минимум 6 символов" />
+                    </div>
                     @if (passwordError)
                     {
-                        <div class="invalid-feedback">Пароль обязателен (минимум 6 символов)</div>
+                        <div class="invalid-feedback d-block">Пароль обязателен (минимум 6 символов)</div>
                     }
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">Имя пользователя <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control @(usernameError ? "is-invalid" : "")"
-                           @bind="_newUser.Username" @bind:event="oninput"
-                           placeholder="Отображаемое имя" />
+                    <div class="input-group">
+                        <span class="input-group-text bg-light">
+                            <i class="fas fa-id-card text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control @(usernameError ? "is-invalid" : "")"
+                               @bind="_newUser.Username" @bind:event="oninput"
+                               placeholder="Отображаемое имя" />
+                    </div>
                     @if (usernameError)
                     {
-                        <div class="invalid-feedback">Имя пользователя обязательно</div>
+                        <div class="invalid-feedback d-block">Имя пользователя обязательно</div>
                     }
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">Email <span class="text-danger">*</span></label>
-                    <input type="email" class="form-control @(emailError ? "is-invalid" : "")"
-                           @bind="_newUser.Email" @bind:event="oninput"
-                           placeholder="user@example.com" />
+                    <div class="input-group">
+                        <span class="input-group-text bg-light">
+                            <i class="fas fa-envelope text-muted"></i>
+                        </span>
+                        <input type="email" class="form-control @(emailError ? "is-invalid" : "")"
+                               @bind="_newUser.Email" @bind:event="oninput"
+                               placeholder="user@example.com" />
+                    </div>
                     @if (emailError)
                     {
-                        <div class="invalid-feedback">Введите корректный email</div>
+                        <div class="invalid-feedback d-block">Введите корректный email</div>
                     }
                 </div>
 
@@ -197,7 +219,7 @@
                     <strong>Примечание:</strong> Пользователи с ролью "Master" могут быть связаны с мастерами
                 </div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer border-0 pt-0">
                 <button type="button" class="btn btn-secondary" @onclick="CloseCreateModal">Отмена</button>
                 <button type="button" class="btn btn-primary" @onclick="CreateUser" @disabled="isCreating">
                     @if (isCreating)
@@ -211,15 +233,14 @@
     </div>
 </div>
 
-<!-- Модальное окно редактирования пользователя -->
 <div class="modal fade @(showEditModal ? "show d-block" : "")" id="editUserModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" @onclick:stopPropagation>
-            <div class="modal-header">
+            <div class="modal-header border-0 pb-0">
                 <h5 class="modal-title">Редактирование пользователя</h5>
-                <button type="button" class="btn-close" @onclick="CloseEditModal" aria-label="Close"></button>
+                <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body p-4">
                 @if (!string.IsNullOrEmpty(editErrorMessage))
                 {
                     <div class="alert alert-danger alert-dismissible fade show">
@@ -239,7 +260,7 @@
                            @bind="_editingUser.Login" @bind:event="oninput" />
                     @if (editLoginError)
                     {
-                        <div class="invalid-feedback">Логин обязателен</div>
+                        <div class="invalid-feedback d-block">Логин обязателен</div>
                     }
                 </div>
 
@@ -250,7 +271,7 @@
                            placeholder="Оставьте пустым, чтобы не менять" />
                     @if (editPasswordError)
                     {
-                        <div class="invalid-feedback">Пароль должен быть не менее 6 символов</div>
+                        <div class="invalid-feedback d-block">Пароль должен быть не менее 6 символов</div>
                     }
                     <small class="text-muted">Минимум 6 символов</small>
                 </div>
@@ -261,7 +282,7 @@
                            @bind="_editingUser.Username" @bind:event="oninput" />
                     @if (editUsernameError)
                     {
-                        <div class="invalid-feedback">Имя пользователя обязательно</div>
+                        <div class="invalid-feedback d-block">Имя пользователя обязательно</div>
                     }
                 </div>
 
@@ -271,7 +292,7 @@
                            @bind="_editingUser.Email" @bind:event="oninput" />
                     @if (editEmailError)
                     {
-                        <div class="invalid-feedback">Введите корректный email</div>
+                        <div class="invalid-feedback d-block">Введите корректный email</div>
                     }
                 </div>
 
@@ -300,7 +321,7 @@
                     </div>
                 }
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer border-0 pt-0">
                 <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">Отмена</button>
                 <button type="button" class="btn btn-primary" @onclick="UpdateUser" @disabled="isUpdating">
                     @if (isUpdating)
@@ -314,116 +335,32 @@
     </div>
 </div>
 
-<!-- Модальное окно смены пароля -->
-<div class="modal fade @(showPasswordModal ? "show d-block" : "")" id="passwordModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content" @onclick:stopPropagation>
-            <div class="modal-header">
-                <h5 class="modal-title">Смена пароля</h5>
-                <button type="button" class="btn-close" @onclick="ClosePasswordModal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                @if (!string.IsNullOrEmpty(passwordErrorMessage))
-                {
-                    <div class="alert alert-danger alert-dismissible fade show">
-                        <i class="fas fa-exclamation-circle me-2"></i> @passwordErrorMessage
-                        <button type="button" class="btn-close" @onclick="() => passwordErrorMessage = null"></button>
-                    </div>
-                }
-
-                <div class="mb-3">
-                    <label class="form-label">Пользователь</label>
-                    <input type="text" class="form-control" value="@_passwordUserId" disabled />
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">Текущий пароль <span class="text-danger">*</span></label>
-                    <input type="password" class="form-control @(currentPasswordError ? "is-invalid" : "")"
-                           @bind="_currentPassword" @bind:event="oninput" />
-                    @if (currentPasswordError)
-                    {
-                        <div class="invalid-feedback">Введите текущий пароль</div>
-                    }
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">Новый пароль <span class="text-danger">*</span></label>
-                    <input type="password" class="form-control @(newPasswordError ? "is-invalid" : "")"
-                           @bind="_newPasswordForChange" @bind:event="oninput" />
-                    @if (newPasswordError)
-                    {
-                        <div class="invalid-feedback">Новый пароль должен быть не менее 6 символов</div>
-                    }
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">Подтверждение пароля <span class="text-danger">*</span></label>
-                    <input type="password" class="form-control @(confirmPasswordError ? "is-invalid" : "")"
-                           @bind="_confirmPassword" @bind:event="oninput" />
-                    @if (confirmPasswordError)
-                    {
-                        <div class="invalid-feedback">Пароли не совпадают</div>
-                    }
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @onclick="ClosePasswordModal">Отмена</button>
-                <button type="button" class="btn btn-primary" @onclick="ChangePassword" @disabled="isChangingPassword">
-                    @if (isChangingPassword)
-                    {
-                        <span class="spinner-border spinner-border-sm me-1"></span>
-                    }
-                    Сменить пароль
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
 @code {
     private List<AdminUserDto> _users = new();
     private List<AdminUserDto> _displayUsers = new();
     private List<int> _masterUserIds = new();
     private string searchText = string.Empty;
 
-    // Переменные для создания пользователя
     private bool showCreateModal = false;
     private bool isCreating = false;
     private string createErrorMessage = string.Empty;
     private CreateUserDto _newUser = new();
 
-    // Валидация создания
     private bool loginError = false;
     private bool passwordError = false;
     private bool usernameError = false;
     private bool emailError = false;
 
-    // Переменные для редактирования пользователя
     private bool showEditModal = false;
     private bool isUpdating = false;
     private string editErrorMessage = string.Empty;
     private AdminUserDto _editingUser = new();
     private string _newPassword = string.Empty;
 
-    // Валидация редактирования
     private bool editLoginError = false;
     private bool editPasswordError = false;
     private bool editUsernameError = false;
     private bool editEmailError = false;
-
-    // Переменные для смены пароля
-    private bool showPasswordModal = false;
-    private bool isChangingPassword = false;
-    private string passwordErrorMessage = string.Empty;
-    private int _passwordUserId = 0;
-    private string _currentPassword = string.Empty;
-    private string _newPasswordForChange = string.Empty;
-    private string _confirmPassword = string.Empty;
-
-    // Валидация смены пароля
-    private bool currentPasswordError = false;
-    private bool newPasswordError = false;
-    private bool confirmPasswordError = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -437,7 +374,6 @@
             var usersFromDb = await Context.Users.ToListAsync();
             _users = (await UserService.GetFormattedUsersForAdminAsync(usersFromDb)).ToList();
 
-            // Загружаем ID пользователей, связанных с мастерами
             var masters = await Context.Masters.ToListAsync();
             _masterUserIds = masters.Select(m => m.UserId).ToList();
 
@@ -488,20 +424,6 @@
         };
         _newPassword = string.Empty;
         showEditModal = true;
-        StateHasChanged();
-    }
-
-    private void ShowPasswordModal(int userId)
-    {
-        _passwordUserId = userId;
-        _currentPassword = string.Empty;
-        _newPasswordForChange = string.Empty;
-        _confirmPassword = string.Empty;
-        passwordErrorMessage = string.Empty;
-        currentPasswordError = false;
-        newPasswordError = false;
-        confirmPasswordError = false;
-        showPasswordModal = true;
         StateHasChanged();
     }
 
@@ -620,43 +542,6 @@
         else
         {
             editEmailError = false;
-        }
-
-        return isValid;
-    }
-
-    private bool ValidatePasswordForm()
-    {
-        bool isValid = true;
-
-        if (string.IsNullOrWhiteSpace(_currentPassword))
-        {
-            currentPasswordError = true;
-            isValid = false;
-        }
-        else
-        {
-            currentPasswordError = false;
-        }
-
-        if (string.IsNullOrWhiteSpace(_newPasswordForChange) || _newPasswordForChange.Length < 6)
-        {
-            newPasswordError = true;
-            isValid = false;
-        }
-        else
-        {
-            newPasswordError = false;
-        }
-
-        if (_newPasswordForChange != _confirmPassword)
-        {
-            confirmPasswordError = true;
-            isValid = false;
-        }
-        else
-        {
-            confirmPasswordError = false;
         }
 
         return isValid;
@@ -782,66 +667,17 @@
         }
     }
 
-    private async Task ChangePassword()
-    {
-        if (!ValidatePasswordForm())
-        {
-            StateHasChanged();
-            return;
-        }
-
-        isChangingPassword = true;
-        passwordErrorMessage = string.Empty;
-        StateHasChanged();
-
-        try
-        {
-            var user = await Context.Users.FindAsync(_passwordUserId);
-            if (user == null)
-            {
-                passwordErrorMessage = "Пользователь не найден";
-                return;
-            }
-
-            await UserService.ChangePasswordAsync(user, _currentPassword, _newPasswordForChange);
-            await Context.SaveChangesAsync();
-
-            ClosePasswordModal();
-
-            await JS.InvokeVoidAsync("alert", "Пароль успешно изменен!");
-        }
-        catch (ArgumentException ex)
-        {
-            passwordErrorMessage = ex.Message;
-        }
-        catch (InvalidOperationException ex)
-        {
-            passwordErrorMessage = ex.Message;
-        }
-        catch (Exception ex)
-        {
-            passwordErrorMessage = $"Ошибка: {ex.Message}";
-        }
-        finally
-        {
-            isChangingPassword = false;
-            StateHasChanged();
-        }
-    }
-
     private async Task DeleteUser(int id)
     {
         var user = _users.FirstOrDefault(u => u.Id == id);
         if (user == null) return;
 
-        // Проверка, что это не последний администратор
         if (user.Role == "Admin" && _users.Count(u => u.Role == "Admin") == 1)
         {
             await JS.InvokeVoidAsync("alert", "Нельзя удалить последнего администратора!");
             return;
         }
 
-        // Проверка, связан ли пользователь с мастером
         if (_masterUserIds.Contains(id))
         {
             if (!await JS.InvokeAsync<bool>("confirm", "Этот пользователь связан с мастером. При удалении пользователя мастер также будет удален. Продолжить?"))
@@ -892,12 +728,6 @@
     {
         showEditModal = false;
         ResetEditForm();
-        StateHasChanged();
-    }
-
-    private void ClosePasswordModal()
-    {
-        showPasswordModal = false;
         StateHasChanged();
     }
 }

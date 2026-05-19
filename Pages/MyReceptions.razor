@@ -1,0 +1,347 @@
+﻿@page "/my-receptions"
+@using HairSalon.DTOs
+@using Microsoft.EntityFrameworkCore
+@inject HairSalon.Data.HairSalonContext Context
+@inject IReceptionService ReceptionService
+@inject IMasterService MasterService
+@inject IServiceService ServiceService
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<div class="container mt-4">
+    <!-- Заголовок (без фона) -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">
+            <i class="fas fa-calendar-alt text-primary me-2"></i>Мои записи
+        </h1>
+        <button class="btn btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/")'>
+            <i class="fas fa-arrow-left me-1"></i>На главную
+        </button>
+    </div>
+
+    <!-- Блок с фильтрами и карточками -->
+    <div class="card shadow-sm border-0 rounded-4" style="background-color: #151922;">
+        <div class="card-body p-4">
+            <!-- Фильтры -->
+            <div class="card shadow-sm border-0 rounded-4 mb-4" style="background: #ffffff;">
+                <div class="card-body p-3">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <select class="form-select" @bind="filterStatus" @bind:event="onchange">
+                                <option value="all">Все записи</option>
+                                <option value="active">Активные</option>
+                                <option value="past">Прошедшие</option>
+                                <option value="today">Сегодня</option>
+                                <option value="tomorrow">Завтра</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 border-0">
+                            <input type="date" class="form-control text-dark" style="background: #ffffff;" @bind="filterDate" @bind:event="onchange" />
+                        </div>
+                        <div class="col-md-4 border-0" style="background: #ffffff;">
+                            <button class="btn btn-outline-secondary w-100 border-0" @onclick="ClearFilters">
+                                <i class="fas fa-eraser me-1"></i>Сбросить фильтры
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Контент -->
+            @if (_isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-light" role="status">
+                        <span class="visually-hidden">Загрузка...</span>
+                    </div>
+                </div>
+            }
+            else if (!_isAuthenticated)
+            {
+                <div class="alert alert-warning text-center">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Пожалуйста, войдите в аккаунт для просмотра записей.
+                    <div class="mt-3">
+                        <button class="btn btn-light" @onclick='() => Navigation.NavigateTo("/")'>Перейти на главную</button>
+                    </div>
+                </div>
+            }
+            else if (!_receptions.Any())
+            {
+                <div class="text-center p-5">
+                    <i class="fas fa-calendar-times fa-4x text-white-50 mb-3"></i>
+                    <h4 class="text-white">У вас пока нет записей</h4>
+                    <p class="text-white-50 mb-4">Запишитесь к мастеру, чтобы увидеть свои записи здесь</p>
+                    <a href="/receptions" class="btn btn-light">
+                        <i class="fas fa-calendar-alt me-2"></i>Записаться
+                    </a>
+                </div>
+            }
+            else
+            {
+                <!-- Список записей -->
+                <div class="row g-4">
+                    @foreach (var reception in _displayReceptions)
+                    {
+                        <div class="col-md-6 col-lg-4">
+                            <div class="reception-card card shadow-sm border-0 rounded-4 h-100" style="background: rgba(255,255,255,0.95);">
+                                <div class="card-body p-4">
+                                    <!-- Статус -->
+                                    <div class="d-flex justify-content-between align-items-start mb-3">
+                                        @{
+                                            var isPast = reception.Time < DateTime.Now;
+                                            var isToday = reception.Time.Date == DateTime.Now.Date;
+                                            var hoursUntil = (reception.Time - DateTime.Now).TotalHours;
+                                        }
+                                        @if (isPast)
+                                        {
+                                            <span class="badge bg-secondary">Прошла</span>
+                                        }
+                                        else if (isToday)
+                                        {
+                                            <span class="badge bg-warning text-dark">Сегодня</span>
+                                        }
+                                        else if (hoursUntil < 24)
+                                        {
+                                            <span class="badge bg-info text-dark">Скоро</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success">Активна</span>
+                                        }
+                                        
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => CancelReception(reception.Id)">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Дата и время -->
+                                    <div class="text-center mb-3">
+                                        <div class="reception-date bg-primary bg-opacity-10 rounded-3 p-2">
+                                            <i class="fas fa-calendar-day text-primary me-1"></i>
+                                            <span class="fw-bold">@reception.Time.ToString("dd.MM.yyyy")</span>
+                                            <i class="fas fa-clock text-primary ms-2 me-1"></i>
+                                            <span class="fw-bold">@reception.Time.ToString("HH:mm")</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Информация о мастере -->
+                                    <div class="info-row mb-3">
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-small bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 45px; height: 45px;">
+                                                <span class="fw-bold">@(reception.Master?.FirstName?[0] ?? '?')@(reception.Master?.LastName?[0] ?? '?')</span>
+                                            </div>
+                                            <div>
+                                                <h6 class="mb-0">@reception.Master?.FirstName @reception.Master?.LastName</h6>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-briefcase me-1"></i>@reception.Master?.Experience
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Информация об услуге -->
+                                    <div class="info-row mb-3 p-3 bg-light rounded-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <i class="fas fa-cut text-primary me-2"></i>
+                                                <span class="fw-bold">@reception.Service?.Name</span>
+                                            </div>
+                                            <span class="h5 mb-0 text-primary">@reception.Service?.Price.ToString("N0") ₽</span>
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(reception.Service?.Description))
+                                        {
+                                            <small class="text-muted d-block mt-1">@reception.Service.Description</small>
+                                        }
+                                    </div>
+
+                                    <!-- Действия -->
+                                    @if (reception.Time > DateTime.Now)
+                                    {
+                                        <div class="d-grid gap-2 mt-3">
+                                            <button class="btn btn-outline-primary btn-sm" @onclick="() => RescheduleReception(reception)">
+                                                <i class="fas fa-calendar-alt me-1"></i>Перенести
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+
+    .reception-card {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .reception-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important;
+    }
+    
+    .avatar-small {
+        font-size: 1.1rem;
+        font-weight: bold;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .reception-date {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    }
+    
+    .badge {
+        padding: 5px 10px;
+        font-size: 0.7rem;
+    }
+    
+    .bg-primary.bg-opacity-10 {
+        background-color: rgba(102, 126, 234, 0.1);
+    }
+    
+    .text-white-50 {
+        color: rgba(255, 255, 255, 0.5);
+    }
+</style>
+
+@code {
+    private List<ReceptionDto> _receptions = new();
+    private List<ReceptionDto> _displayReceptions = new();
+    private bool _isLoading = true;
+    private bool _isAuthenticated = false;
+    private int _currentUserId = 0;
+    
+    private string filterStatus = "all";
+    private DateTime? filterDate = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserAndReceptions();
+    }
+
+    private async Task LoadUserAndReceptions()
+    {
+        try
+        {
+            _isLoading = true;
+            
+            var userIdStr = await JS.InvokeAsync<string>("localStorage.getItem", "userId");
+            
+            if (string.IsNullOrEmpty(userIdStr))
+            {
+                _isAuthenticated = false;
+                return;
+            }
+            
+            _currentUserId = int.Parse(userIdStr);
+            _isAuthenticated = true;
+            
+            var receptionsFromDb = await Context.Receptions
+                .Include(r => r.Master)
+                    .ThenInclude(m => m.User)
+                .Include(r => r.Service)
+                .Where(r => r.ClientId == _currentUserId)
+                .OrderByDescending(r => r.Time)
+                .ToListAsync();
+            
+            _receptions = (await ReceptionService.GetFormattedReceptionsAsync(receptionsFromDb)).ToList();
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки записей: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        var filtered = _receptions.AsEnumerable();
+        
+        switch (filterStatus)
+        {
+            case "active":
+                filtered = filtered.Where(r => r.Time >= DateTime.Now);
+                break;
+            case "past":
+                filtered = filtered.Where(r => r.Time < DateTime.Now);
+                break;
+            case "today":
+                filtered = filtered.Where(r => r.Time.Date == DateTime.Now.Date);
+                break;
+            case "tomorrow":
+                filtered = filtered.Where(r => r.Time.Date == DateTime.Now.AddDays(1).Date);
+                break;
+        }
+        
+        if (filterDate.HasValue)
+        {
+            filtered = filtered.Where(r => r.Time.Date == filterDate.Value.Date);
+        }
+        
+        _displayReceptions = filtered.OrderByDescending(r => r.Time).ToList();
+        StateHasChanged();
+    }
+
+    private void ClearFilters()
+    {
+        filterStatus = "all";
+        filterDate = null;
+        ApplyFilters();
+    }
+
+    private async Task CancelReception(int id)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Вы уверены, что хотите отменить эту запись?"))
+            return;
+        
+        try
+        {
+            var reception = await Context.Receptions
+                .Include(r => r.Master)
+                .FirstOrDefaultAsync(r => r.Id == id);
+                
+            if (reception == null)
+            {
+                await JS.InvokeVoidAsync("alert", "Запись не найдена");
+                return;
+            }
+            
+            if (reception.Time < DateTime.Now)
+            {
+                await JS.InvokeVoidAsync("alert", "Нельзя отменить прошедшую запись");
+                return;
+            }
+            
+            if (reception.Time < DateTime.Now.AddHours(1))
+            {
+                await JS.InvokeVoidAsync("alert", "Отмена возможна не позднее чем за час до записи");
+                return;
+            }
+            
+            Context.Receptions.Remove(reception);
+            await Context.SaveChangesAsync();
+            
+            await LoadUserAndReceptions();
+            await JS.InvokeVoidAsync("alert", "Запись успешно отменена");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Ошибка: {ex.Message}");
+        }
+    }
+
+    private void RescheduleReception(ReceptionDto reception)
+    {
+        JS.InvokeVoidAsync("alert", "Функция переноса записи в разработке");
+    }
+}

@@ -1,19 +1,82 @@
-﻿@namespace HairSalon.Shared
-@inherits LayoutComponentBase
+﻿@inherits LayoutComponentBase
+@using Microsoft.EntityFrameworkCore
+@using HairSalon.DTOs
 @inject NavigationManager Navigation
+@inject HairSalon.Data.HairSalonContext Context
+@inject IMasterService MasterService
+@inject IServiceService ServiceService
+@inject IReceptionService ReceptionService
+@inject IUserService UserService
+@inject IJSRuntime JS
 
 <div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+    <main class="full-width">
+        <!-- Верхняя панель -->
+        <div class="top-row px-4">
+            <div class="d-flex justify-content-between align-items-center w-100">
+                <div class="brand-logo" @onclick='() => Navigation.NavigateTo("/")' style="cursor: pointer;">
+                    <i class="fas fa-cut text-primary me-2"></i>
+                    <span class="fw-bold">Nazarick</span>
+                </div>
 
-    <main>
-        <div class="top-bar px-4">
-            <div class="d-flex justify-content-between align-items-center py-2">
-                <h4 class="mb-0"> Панель управления</h4>
-                <button class="btn btn-outline-secondary" @onclick="GoHome">
-                    <i class="fas fa-home"></i> На сайт
-                </button>
+                <div class="d-flex gap-2 align-items-center">
+                    @if (string.IsNullOrEmpty(_currentUser))
+                    {
+                        <button class="btn btn-outline-primary btn-sm" @onclick="ShowLoginModal">
+                            <i class="fas fa-sign-in-alt me-1"></i>Войти
+                        </button>
+                        <button class="btn btn-primary btn-sm" @onclick="ShowRegisterModal">
+                            <i class="fas fa-user-plus me-1"></i>Регистрация
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="dropdown-container">
+                            <button class="user-menu-btn" @onclick="ToggleDropdown" @onclick:stopPropagation>
+                                <i class="fas fa-user-circle me-1"></i>@_currentUser
+                                <span class="dropdown-arrow">▼</span>
+                            </button>
+
+                            @if (showDropdown)
+                            {
+                                <div class="dropdown-menu-custom">
+                                    <div class="dropdown-header">
+                                        <i class="fas fa-id-card me-1"></i>
+                                        @if (_currentUserRole == "Admin")
+                                        {
+                                            <span class="badge bg-danger">Администратор</span>
+                                        }
+                                        else if (_currentUserRole == "Master")
+                                        {
+                                            <span class="badge bg-primary">Мастер</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Пользователь</span>
+                                        }
+                                    </div>
+                                    <div class="dropdown-divider"></div>
+                                                                        
+                                    <button class="dropdown-item" @onclick="GoToProfile">
+                                        <i class="fas fa-user me-2 text-primary"></i>
+                                        <span class="text-white">Мой профиль</span>
+                                    </button>
+
+                                    <button class="dropdown-item" @onclick="GoToMyReceptions">
+                                        <i class="fas fa-calendar-alt me-2 text-primary"></i>
+                                        <span class="text-white">Мои записи</span>
+                                    </button>
+
+                                    <div class="dropdown-divider"></div>
+
+                                    <button class="dropdown-item text-danger" @onclick="Logout">
+                                        <i class="fas fa-sign-out-alt me-2"></i>Выйти
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
             </div>
         </div>
 
@@ -21,41 +84,714 @@
             @Body
         </article>
     </main>
+
+    <!-- Модальное окно входа -->
+    <div class="modal fade @(showLoginModal ? "show d-block" : "")" id="loginModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" @onclick:stopPropagation>
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title">
+                        <i class="fas fa-sign-in-alt text-primary me-2"></i>Вход в аккаунт
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseLoginModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    @if (!string.IsNullOrEmpty(loginErrorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show">
+                            <i class="fas fa-exclamation-circle me-2"></i> @loginErrorMessage
+                            <button type="button" class="btn-close" @onclick="() => loginErrorMessage = null"></button>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Логин или Email <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light">
+                                <i class="fas fa-user text-muted"></i>
+                            </span>
+                            <input type="text" class="form-control @(loginLoginError ? "is-invalid" : "")"
+                                   @bind="_loginLogin" @bind:event="oninput"
+                                   placeholder="Введите логин или email" />
+                        </div>
+                        @if (loginLoginError)
+                        {
+                            <div class="invalid-feedback d-block">Введите логин или email</div>
+                        }
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Пароль <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light">
+                                <i class="fas fa-lock text-muted"></i>
+                            </span>
+                            <input type="@(showLoginPassword ? "text" : "password")"
+                                   class="form-control @(loginPasswordError ? "is-invalid" : "")"
+                                   @bind="_loginPassword" @bind:event="oninput"
+                                   placeholder="Введите пароль" />
+                            <button class="btn btn-outline-secondary" type="button" @onclick="() => showLoginPassword = !showLoginPassword">
+                                <i class="fas @(showLoginPassword ? "fa-eye-slash" : "fa-eye")"></i>
+                            </button>
+                        </div>
+                        @if (loginPasswordError)
+                        {
+                            <div class="invalid-feedback d-block">Введите пароль</div>
+                        }
+                    </div>
+
+                    <button class="btn btn-primary w-100 py-2" @onclick="Login" @disabled="isLoggingIn">
+                        @if (isLoggingIn)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        <i class="fas fa-sign-in-alt me-2"></i>Войти
+                    </button>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <div class="text-center w-100">
+                        <p class="text-muted mb-0">
+                            Нет аккаунта?
+                            <button class="btn btn-link p-0 text-primary" @onclick="SwitchToRegister">
+                                Зарегистрироваться
+                            </button>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно регистрации -->
+    <div class="modal fade @(showRegisterModal ? "show d-block" : "")" id="registerModal" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick:stopPropagation>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" @onclick:stopPropagation>
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title">
+                        <i class="fas fa-user-plus text-primary me-2"></i>Регистрация
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseRegisterModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    @if (!string.IsNullOrEmpty(registerErrorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show">
+                            <i class="fas fa-exclamation-circle me-2"></i> @registerErrorMessage
+                            <button type="button" class="btn-close" @onclick="() => registerErrorMessage = null"></button>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Логин <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light">
+                                <i class="fas fa-user text-muted"></i>
+                            </span>
+                            <input type="text" class="form-control @(regLoginError ? "is-invalid" : "")"
+                                   @bind="_regLogin" @bind:event="oninput"
+                                   placeholder="Придумайте логин" />
+                        </div>
+                        @if (regLoginError)
+                        {
+                            <div class="invalid-feedback d-block">Логин обязателен</div>
+                        }
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Пароль <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light">
+                                <i class="fas fa-lock text-muted"></i>
+                            </span>
+                            <input type="@(showRegPassword ? "text" : "password")"
+                                   class="form-control @(regPasswordError ? "is-invalid" : "")"
+                                   @bind="_regPassword" @bind:event="oninput"
+                                   placeholder="Минимум 6 символов" />
+                            <button class="btn btn-outline-secondary" type="button" @onclick="() => showRegPassword = !showRegPassword">
+                                <i class="fas @(showRegPassword ? "fa-eye-slash" : "fa-eye")"></i>
+                            </button>
+                        </div>
+                        @if (regPasswordError)
+                        {
+                            <div class="invalid-feedback d-block">Пароль должен быть не менее 6 символов</div>
+                        }
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Имя пользователя <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light">
+                                <i class="fas fa-id-card text-muted"></i>
+                            </span>
+                            <input type="text" class="form-control @(regUsernameError ? "is-invalid" : "")"
+                                   @bind="_regUsername" @bind:event="oninput"
+                                   placeholder="Как к вам обращаться" />
+                        </div>
+                        @if (regUsernameError)
+                        {
+                            <div class="invalid-feedback d-block">Имя пользователя обязательно</div>
+                        }
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Email <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light">
+                                <i class="fas fa-envelope text-muted"></i>
+                            </span>
+                            <input type="email" class="form-control @(regEmailError ? "is-invalid" : "")"
+                                   @bind="_regEmail" @bind:event="oninput"
+                                   placeholder="example@mail.com" />
+                        </div>
+                        @if (regEmailError)
+                        {
+                            <div class="invalid-feedback d-block">Введите корректный email</div>
+                        }
+                    </div>
+
+                    <div class="alert alert-info small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        После регистрации вы сможете записываться к мастерам
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseRegisterModal">Отмена</button>
+                    <button type="button" class="btn btn-primary" @onclick="Register" @disabled="isRegistering">
+                        @if (isRegistering)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1"></span>
+                        }
+                        <i class="fas fa-check me-1"></i>Зарегистрироваться
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    @if (_currentUserRole == "Admin")
+    {
+        <AdminPanel />
+    }
+    @if (_currentUserRole == "Master")
+    {
+        <MasterPanel />
+    }
 </div>
 
 <style>
     .page {
+        min-height: 100vh;
+        background: #1e1e1e;
+    }
+
+    main.full-width {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .top-row {
+        background-color: #1a1f2a;
+        height: 60px;
         display: flex;
-        height: 100vh;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
     }
 
-    .sidebar {
-        width: 260px;
-        background: #35495f;
-        color: white;
+    .brand-logo {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #667eea;
+        cursor: pointer;
+        transition: opacity 0.2s ease;
     }
 
-    main {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        overflow-y: auto;
-    }
-
-    .top-bar {
-        background: #2c3e50;
-        border-bottom: 1px solid #2c3e50;
-    }
+        .brand-logo:hover {
+            opacity: 0.8;
+        }
 
     .content {
-        flex: 1;
-        padding: 20px;
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
+    }
+
+    /* Dropdown меню */
+    .dropdown-container {
+        position: relative;
+        display: inline-block;
+    }
+
+    .user-menu-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        border-radius: 30px;
+        color: white;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 14px;
+    }
+
+        .user-menu-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+    .dropdown-arrow {
+        font-size: 10px;
+        margin-left: 5px;
+    }
+
+    .dropdown-menu-custom {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        margin-top: 10px;
+        background-color: #1a1f2a;
+        min-width: 240px;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+        border-radius: 8px;
+        border: 1px solid #151922;
+        z-index: 10000;
+    }
+
+    .dropdown-header {
+        padding: 10px 16px;
+        background-color: #151922;
+        border-radius: 8px 8px 0 0;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        padding: 10px 16px;
+        text-align: left;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 14px;
+        color: #e0e0e0;
+        transition: all 0.2s ease;
+    }
+
+        .dropdown-item:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+    .dropdown-divider {
+        height: 1px;
+        margin: 8px 0;
+        background-color: #2a2f3a;
+    }
+
+    .text-danger {
+        color: #dc3545 !important;
+    }
+
+        .text-danger:hover {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+        }
+
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        font-size: 11px;
+        font-weight: 600;
+        border-radius: 4px;
+        margin-left: 8px;
+    }
+
+        .badge.bg-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .badge.bg-primary {
+            background-color: #667eea;
+            color: white;
+        }
+
+        .badge.bg-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+
+    .dropdown-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 999;
+        cursor: pointer;
+    }
+
+    @@media (max-width: 640.98px) {
+        .top-row {
+            height: 50px;
+        }
+
+        .brand-logo {
+            font-size: 1rem;
+        }
+
+        .btn-outline-primary, .btn-primary {
+            padding: 4px 10px;
+            font-size: 0.8rem;
+        }
+
+        .user-menu-btn {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
     }
 </style>
 
 @code {
-    private void GoHome()
+    private string _currentUser = string.Empty;
+    private string _currentUserRole = string.Empty;
+    private bool showDropdown = false;
+
+    // Login related
+    private bool showLoginModal = false;
+    private bool isLoggingIn = false;
+    private string loginErrorMessage = string.Empty;
+    private string _loginLogin = string.Empty;
+    private string _loginPassword = string.Empty;
+    private bool showLoginPassword = false;
+    private bool loginLoginError = false;
+    private bool loginPasswordError = false;
+
+    // Register related
+    private bool showRegisterModal = false;
+    private bool isRegistering = false;
+    private string registerErrorMessage = string.Empty;
+    private string _regLogin = string.Empty;
+    private string _regPassword = string.Empty;
+    private string _regUsername = string.Empty;
+    private string _regEmail = string.Empty;
+    private bool showRegPassword = false;
+    private bool regLoginError = false;
+    private bool regPasswordError = false;
+    private bool regUsernameError = false;
+    private bool regEmailError = false;
+
+    protected override async Task OnInitializedAsync()
     {
-        Navigation.NavigateTo("/");
+        await LoadCurrentUser();
+    }
+
+    private async Task LoadCurrentUser()
+    {
+        try
+        {
+            _currentUser = await JS.InvokeAsync<string>("localStorage.getItem", "currentUser");
+            _currentUserRole = await JS.InvokeAsync<string>("localStorage.getItem", "userRole");
+
+            if (!string.IsNullOrEmpty(_currentUser))
+            {
+                var user = await Context.Users.FirstOrDefaultAsync(u => u.Login == _currentUser);
+                if (user == null || !user.IsActive)
+                {
+                    await Logout();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки пользователя: {ex.Message}");
+        }
+        StateHasChanged();
+    }
+
+    private void ShowLoginModal()
+    {
+        _loginLogin = string.Empty;
+        _loginPassword = string.Empty;
+        loginErrorMessage = string.Empty;
+        loginLoginError = false;
+        loginPasswordError = false;
+        showLoginModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseLoginModal()
+    {
+        showLoginModal = false;
+        StateHasChanged();
+    }
+
+    private void ShowRegisterModal()
+    {
+        ResetRegisterForm();
+        showRegisterModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseRegisterModal()
+    {
+        showRegisterModal = false;
+        StateHasChanged();
+    }
+
+    private void SwitchToRegister()
+    {
+        CloseLoginModal();
+        ShowRegisterModal();
+    }
+
+    private void ResetRegisterForm()
+    {
+        _regLogin = string.Empty;
+        _regPassword = string.Empty;
+        _regUsername = string.Empty;
+        _regEmail = string.Empty;
+        registerErrorMessage = string.Empty;
+        regLoginError = false;
+        regPasswordError = false;
+        regUsernameError = false;
+        regEmailError = false;
+    }
+
+    private bool ValidateLogin()
+    {
+        bool isValid = true;
+        if (string.IsNullOrWhiteSpace(_loginLogin))
+        {
+            loginLoginError = true;
+            isValid = false;
+        }
+        else
+        {
+            loginLoginError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_loginPassword))
+        {
+            loginPasswordError = true;
+            isValid = false;
+        }
+        else
+        {
+            loginPasswordError = false;
+        }
+        return isValid;
+    }
+
+    private bool ValidateRegister()
+    {
+        bool isValid = true;
+
+        if (string.IsNullOrWhiteSpace(_regLogin))
+        {
+            regLoginError = true;
+            isValid = false;
+        }
+        else
+        {
+            regLoginError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_regPassword) || _regPassword.Length < 6)
+        {
+            regPasswordError = true;
+            isValid = false;
+        }
+        else
+        {
+            regPasswordError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_regUsername))
+        {
+            regUsernameError = true;
+            isValid = false;
+        }
+        else
+        {
+            regUsernameError = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(_regEmail) || !_regEmail.Contains("@"))
+        {
+            regEmailError = true;
+            isValid = false;
+        }
+        else
+        {
+            regEmailError = false;
+        }
+
+        return isValid;
+    }
+
+    private async Task Login()
+    {
+        if (!ValidateLogin())
+        {
+            StateHasChanged();
+            return;
+        }
+
+        isLoggingIn = true;
+        loginErrorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var user = await Context.Users.FirstOrDefaultAsync(u => u.Login == _loginLogin || u.Email == _loginLogin);
+
+            if (user == null)
+            {
+                loginErrorMessage = "Пользователь с таким логином или email не найден";
+            }
+            else if (!UserService.VerifyPassword(_loginPassword, user.PasswordHash))
+            {
+                loginErrorMessage = "Неверный пароль";
+            }
+            else if (!user.IsActive)
+            {
+                loginErrorMessage = "Ваш аккаунт заблокирован";
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("localStorage.setItem", "currentUser", user.Login);
+                await JS.InvokeVoidAsync("localStorage.setItem", "userRole", user.Role);
+                await JS.InvokeVoidAsync("localStorage.setItem", "userId", user.UserId.ToString());
+
+                _currentUser = user.Login;
+                _currentUserRole = user.Role;
+
+                CloseLoginModal();
+                StateHasChanged();
+                Navigation.NavigateTo("/", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            loginErrorMessage = $"Ошибка: {ex.Message}";
+        }
+        finally
+        {
+            isLoggingIn = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Register()
+    {
+        if (!ValidateRegister())
+        {
+            StateHasChanged();
+            return;
+        }
+
+        isRegistering = true;
+        registerErrorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var existingUser = await Context.Users.FirstOrDefaultAsync(u => u.Login == _regLogin || u.Email == _regEmail);
+
+            if (existingUser != null)
+            {
+                registerErrorMessage = existingUser.Login == _regLogin ? "Пользователь с таким логином уже существует" : "Пользователь с таким email уже существует";
+                return;
+            }
+
+            var newUser = new User
+            {
+                Login = _regLogin,
+                PasswordHash = UserService.HashPassword(_regPassword),
+                Username = _regUsername,
+                Email = _regEmail,
+                Role = "User",
+                IsActive = true
+            };
+
+            Context.Users.Add(newUser);
+            await Context.SaveChangesAsync();
+
+            CloseRegisterModal();
+
+            _loginLogin = _regLogin;
+            _loginPassword = string.Empty;
+            ShowLoginModal();
+        }
+        catch (DbUpdateException ex)
+        {
+            var innerMessage = ex.InnerException?.Message ?? ex.Message;
+            if (innerMessage.Contains("IX_Users_Login"))
+                registerErrorMessage = "Пользователь с таким логином уже существует";
+            else if (innerMessage.Contains("IX_Users_Email"))
+                registerErrorMessage = "Пользователь с таким email уже существует";
+            else
+                registerErrorMessage = $"Ошибка базы данных: {innerMessage}";
+        }
+        catch (Exception ex)
+        {
+            registerErrorMessage = $"Ошибка: {ex.Message}";
+        }
+        finally
+        {
+            isRegistering = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleDropdown()
+    {
+        showDropdown = !showDropdown;
+        StateHasChanged();
+    }
+
+    private void CloseDropdown()
+    {
+        if (showDropdown)
+        {
+            showDropdown = false;
+            StateHasChanged();
+        }
+    }
+
+    private void GoToProfile()
+    {
+        showDropdown = false;
+        StateHasChanged();
+        Navigation.NavigateTo("/profile");
+    }
+
+    private void GoToMyReceptions()
+    {
+        showDropdown = false;
+        StateHasChanged();
+        Navigation.NavigateTo("/my-receptions");
+    }
+
+    private async Task Logout()
+    {
+        showDropdown = false;
+        await JS.InvokeVoidAsync("localStorage.removeItem", "currentUser");
+        await JS.InvokeVoidAsync("localStorage.removeItem", "userRole");
+        await JS.InvokeVoidAsync("localStorage.removeItem", "userId");
+
+        _currentUser = string.Empty;
+        _currentUserRole = string.Empty;
+
+        StateHasChanged();
+        Navigation.NavigateTo("/", true);
     }
 }

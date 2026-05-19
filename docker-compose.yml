@@ -2,8 +2,8 @@
 
 services:
   webapp:
-    image: aresuku/hairsalon:latest
-    container_name: hairsalon
+    image: aresuku/nazaric:latest
+    container_name: nazaric
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,7 +13,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=HairSalonDB;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;Encrypt=False
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=NazaricDB;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;Encrypt=False
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -33,7 +33,7 @@ services:
 
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: HairSalon-sqlserver
+    container_name: Nazaric-sqlserver
     restart: unless-stopped
     environment:
       - ACCEPT_EULA=Y

@@ -25,30 +25,28 @@ namespace HairSalon.Data
             modelBuilder.Entity<Reception>()// Запрет на создание двух записей для одного мастера в одно время
                 .HasIndex(r => new { r.MasterId, r.Time })
                 .IsUnique()
-                .HasDatabaseName("IX_Receptions_MasterId_Time");
+                .HasDatabaseName("Receptions_MasterId_Time");
 
             
             modelBuilder.Entity<Master>()// Уникальный email у мастеров
                 .HasIndex(m => m.Email)
                 .IsUnique()
-                .HasDatabaseName("IX_Masters_Email");
+                .HasDatabaseName("Masters_Email");
             
             modelBuilder.Entity<User>()// Уникальный логин у пользователей
                 .HasIndex(u => u.Login)
                 .IsUnique()
-                .HasDatabaseName("IX_Users_Login");
+                .HasDatabaseName("Users_Login");
             
             modelBuilder.Entity<User>()// Уникальный email у пользователей
                 .HasIndex(u => u.Email)
                 .IsUnique()
-                .HasDatabaseName("IX_Users_Email");
+                .HasDatabaseName("Users_Email");
             
             modelBuilder.Entity<Service>()// Уникальное имя услуги
                 .HasIndex(s => s.Name)
                 .IsUnique()
-                .HasDatabaseName("IX_Services_Name");
-
-
+                .HasDatabaseName("Services_Name");
            
             modelBuilder.Entity<Reception>() // Reception -> Master (1:N)
                 .HasOne(r => r.Master)
