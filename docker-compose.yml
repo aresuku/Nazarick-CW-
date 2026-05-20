@@ -1,4 +1,4 @@
-﻿version: '6.7'
+﻿version: '5.2'
 
 services:
   webapp:
